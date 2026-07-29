@@ -3,11 +3,54 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import {
-  type Job,
-  type JobStatus,
-  JOB_STATUSES,
-} from "@/components/EditJobModal";
+/* =========================================================
+   Job Types
+
+   This Dashboard is read-only, so the shared EditJobModal
+   dependency is intentionally removed. Keeping the types here
+   prevents module-resolution and implicit-any TypeScript errors.
+========================================================= */
+
+const JOB_STATUSES = [
+  "New Job",
+  "Claim Warranty",
+  "Pending Invoice",
+  "Pending Parts",
+  "Pending Quotation",
+  "Pending Spec Parts",
+  "Complete",
+] as const;
+
+type JobStatus = (typeof JOB_STATUSES)[number];
+
+type Job = {
+  jobId: string;
+  jobInDateTime: string;
+
+  salesPerson: string;
+  salesPersonPhone: string;
+
+  customerStatus: string;
+  customerName: string;
+  customerPhone: string;
+  customerCompanyName: string;
+
+  assignedTechnician: string;
+  technicianPhone: string;
+
+  description: string;
+  status: JobStatus;
+
+  inProgressStartDateTime: string;
+  inProgressEndDateTime: string;
+
+  statusRemark: string;
+  jobCompleteDateTime: string;
+
+  invoiceNo: string;
+  reportNo: string;
+  collectionDateTime: string;
+};
 
 /* =========================================================
    Initial Job Data
