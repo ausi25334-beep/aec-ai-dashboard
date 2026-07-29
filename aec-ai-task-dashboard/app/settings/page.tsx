@@ -73,11 +73,14 @@ type DashboardSettings = {
   dashboardTitle: string;
   administratorName: string;
   operationsTeam: string;
+  appearance: "system" | "light" | "dark";
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
   columnOrder: JobColumnKey[];
 };
+
+type SettingsCategory = "organization" | "job-dashboard";
 
 /*
   DEFAULT HEADER LOGO
@@ -93,6 +96,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
   operationsTeam: "Operations Team",
+  appearance: "system",
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
@@ -137,6 +141,45 @@ function SettingsIcon() {
   );
 }
 
+function OrganizationIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M3 21h18" />
+      <path d="M5 21V7l7-4 7 4v14" />
+      <path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" />
+    </svg>
+  );
+}
+
+function DashboardIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 export default function SettingsPage() {
   const router = useRouter();
 
@@ -144,6 +187,8 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [logoError, setLogoError] = useState("");
   const [draggedColumn, setDraggedColumn] = useState<JobColumnKey | null>(null);
+  const [activeCategory, setActiveCategory] =
+    useState<SettingsCategory>("organization");
 
   useEffect(() => {
     try {
@@ -247,8 +292,13 @@ export default function SettingsPage() {
   function handleReset() {
     const resettableDefaults: Pick<
       DashboardSettings,
-      "showStageLegend" | "showSummary" | "autoCompleteDate" | "columnOrder"
+      | "appearance"
+      | "showStageLegend"
+      | "showSummary"
+      | "autoCompleteDate"
+      | "columnOrder"
     > = {
+      appearance: DEFAULT_SETTINGS.appearance,
       showStageLegend: DEFAULT_SETTINGS.showStageLegend,
       showSummary: DEFAULT_SETTINGS.showSummary,
       autoCompleteDate: DEFAULT_SETTINGS.autoCompleteDate,
@@ -366,347 +416,511 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-6">
-          <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-6 py-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-              Category 1
-            </p>
-
-            <h3 className="mt-1 text-lg font-semibold text-slate-950">
-              Organization &amp; Branding
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-600">
-              Manage the dashboard logo, company details and administrator
-              profile. Reset Default will not change these settings.
-            </p>
-          </div>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Branding
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Upload the logo displayed beside the company name in the
-                Dashboard header.
-              </p>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
-                <img
-                  src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
-                  alt="Dashboard logo preview"
-                  className="h-full w-full object-contain"
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-800">
-                  Dashboard Logo
-                </p>
-
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  JPG, PNG, WEBP or SVG. Maximum file size: 2 MB.
-                </p>
-
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">
-                    Upload New Logo
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml"
-                      onChange={handleLogoUpload}
-                      className="sr-only"
-                    />
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSettings((current) => ({
-                        ...current,
-                        logoDataUrl: DEFAULT_LOGO_DATA_URL,
-                      }));
-                      setLogoError("");
-                      setSaved(false);
-                    }}
-                    className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    Use Placeholder
-                  </button>
-                </div>
-
-                {logoError && (
-                  <p className="mt-3 text-sm font-medium text-rose-600">
-                    {logoError}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Company Information
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Information shown at the top of the dashboard.
-              </p>
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="companyName"
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Company Name
-                </label>
-
-                <input
-                  id="companyName"
-                  value={settings.companyName}
-                  onChange={(event) =>
-                    updateTextField("companyName", event.target.value)
-                  }
-                  className={inputStyle}
-                  placeholder="AEC Company"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="dashboardTitle"
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Dashboard Title
-                </label>
-
-                <input
-                  id="dashboardTitle"
-                  value={settings.dashboardTitle}
-                  onChange={(event) =>
-                    updateTextField("dashboardTitle", event.target.value)
-                  }
-                  className={inputStyle}
-                  placeholder="AI Task Management Dashboard"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Administrator Profile
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Information displayed beside the Setting icon.
-              </p>
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="administratorName"
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Administrator Name
-                </label>
-
-                <input
-                  id="administratorName"
-                  value={settings.administratorName}
-                  onChange={(event) =>
-                    updateTextField("administratorName", event.target.value)
-                  }
-                  className={inputStyle}
-                  placeholder="Administrator"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="operationsTeam"
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Department / Team
-                </label>
-
-                <input
-                  id="operationsTeam"
-                  value={settings.operationsTeam}
-                  onChange={(event) =>
-                    updateTextField("operationsTeam", event.target.value)
-                  }
-                  className={inputStyle}
-                  placeholder="Operations Team"
-                />
-              </div>
-            </div>
-          </section>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-100/80 px-6 py-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Category 2
-            </p>
-
-            <h3 className="mt-1 text-lg font-semibold text-slate-950">
-              Job &amp; Dashboard Settings
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-600">
-              Configure Job Information, Sheet Column Order and Dashboard
-              Display. Reset Default applies only to this category.
-            </p>
-          </div>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Job Information Sheet Column Order
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Drag columns into the required order, or use the arrow buttons.
-                The first item will appear on the left side of the table.
-              </p>
-            </div>
-
-            <div className="mt-5 space-y-2">
-              {settings.columnOrder.map((column, index) => (
-                <div
-                  key={column}
-                  draggable
-                  onDragStart={() => setDraggedColumn(column)}
-                  onDragEnd={() => setDraggedColumn(null)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => dropColumn(column)}
-                  className={`flex cursor-grab items-center gap-3 rounded-xl border px-3 py-3 transition active:cursor-grabbing ${
-                    draggedColumn === column
-                      ? "border-blue-400 bg-blue-50 opacity-60"
-                      : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/50"
+        <form
+          onSubmit={handleSave}
+          className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]"
+        >
+          <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-6">
+            <nav className="p-3" aria-label="Settings categories">
+              <button
+                type="button"
+                onClick={() => setActiveCategory("organization")}
+                aria-current={
+                  activeCategory === "organization" ? "page" : undefined
+                }
+                className={`flex w-full items-center gap-3 rounded-xl px-4 py-4 text-left text-sm font-semibold transition ${
+                  activeCategory === "organization"
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                }`}
+              >
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                    activeCategory === "organization"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-500"
                   }`}
                 >
-                  <span
-                    className="select-none text-lg font-bold tracking-[-0.2em] text-slate-400"
-                    aria-hidden="true"
-                  >
-                    ⋮⋮
-                  </span>
+                  <OrganizationIcon />
+                </span>
+                <span>Organization &amp; Branding</span>
+              </button>
 
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-semibold text-slate-500 shadow-sm">
-                    {index + 1}
-                  </span>
+              <button
+                type="button"
+                onClick={() => setActiveCategory("job-dashboard")}
+                aria-current={
+                  activeCategory === "job-dashboard" ? "page" : undefined
+                }
+                className={`mt-1 flex w-full items-center gap-3 rounded-xl px-4 py-4 text-left text-sm font-semibold transition ${
+                  activeCategory === "job-dashboard"
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                }`}
+              >
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                    activeCategory === "job-dashboard"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  <DashboardIcon />
+                </span>
+                <span>Job &amp; Dashboard Settings</span>
+              </button>
+            </nav>
+          </aside>
 
-                  <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
-                    {JOB_COLUMN_LABELS[column]}
-                  </span>
-
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => moveColumn(column, -1)}
-                      disabled={index === 0}
-                      aria-label={`Move ${JOB_COLUMN_LABELS[column]} left`}
-                      title="Move left in table"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
-                    >
-                      ↑
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => moveColumn(column, 1)}
-                      disabled={index === settings.columnOrder.length - 1}
-                      aria-label={`Move ${JOB_COLUMN_LABELS[column]} right`}
-                      title="Move right in table"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Dashboard Display
+          <div className="min-w-0 space-y-6">
+            <div>
+              <h3 className="text-xl font-semibold text-slate-950">
+                {activeCategory === "organization"
+                  ? "Organization & Branding"
+                  : "Job & Dashboard Settings"}
               </h3>
-
               <p className="mt-1 text-sm text-slate-500">
-                Choose which information appears on the dashboard.
+                {activeCategory === "organization"
+                  ? "Manage the dashboard logo, company details and administrator profile."
+                  : "Configure the table columns, dashboard display and appearance."}
               </p>
             </div>
 
-            <div className="mt-5 divide-y divide-slate-100">
-              <SettingToggle
-                title="Show Stage Legend"
-                description="Display the colour legend on the right side of the Job Progress Board."
-                checked={settings.showStageLegend}
-                onChange={(checked) => updateToggle("showStageLegend", checked)}
-              />
+            {activeCategory === "organization" && (
+              <>
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Branding
+                    </h3>
 
-              <SettingToggle
-                title="Show Summary"
-                description="Display the status totals and overall job total."
-                checked={settings.showSummary}
-                onChange={(checked) => updateToggle("showSummary", checked)}
-              />
+                    <p className="mt-1 text-sm text-slate-500">
+                      Upload the logo displayed beside the company name in the
+                      Dashboard header.
+                    </p>
+                  </div>
 
-              <SettingToggle
-                title="Automatic Completion Date"
-                description="Automatically record the date and time when a job moves to Completed."
-                checked={settings.autoCompleteDate}
-                onChange={(checked) =>
-                  updateToggle("autoCompleteDate", checked)
-                }
-              />
+                  <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
+                    <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+                      <img
+                        src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
+                        alt="Dashboard logo preview"
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800">
+                        Dashboard Logo
+                      </p>
+
+                      <p className="mt-1 text-sm leading-5 text-slate-500">
+                        JPG, PNG, WEBP or SVG. Maximum file size: 2 MB.
+                      </p>
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">
+                          Upload New Logo
+                          <input
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml"
+                            onChange={handleLogoUpload}
+                            className="sr-only"
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSettings((current) => ({
+                              ...current,
+                              logoDataUrl: DEFAULT_LOGO_DATA_URL,
+                            }));
+                            setLogoError("");
+                            setSaved(false);
+                          }}
+                          className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          Use Placeholder
+                        </button>
+                      </div>
+
+                      {logoError && (
+                        <p className="mt-3 text-sm font-medium text-rose-600">
+                          {logoError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Company Information
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Information shown at the top of the dashboard.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="companyName"
+                        className="text-sm font-medium text-slate-700"
+                      >
+                        Company Name
+                      </label>
+
+                      <input
+                        id="companyName"
+                        value={settings.companyName}
+                        onChange={(event) =>
+                          updateTextField("companyName", event.target.value)
+                        }
+                        className={inputStyle}
+                        placeholder="AEC Company"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="dashboardTitle"
+                        className="text-sm font-medium text-slate-700"
+                      >
+                        Dashboard Title
+                      </label>
+
+                      <input
+                        id="dashboardTitle"
+                        value={settings.dashboardTitle}
+                        onChange={(event) =>
+                          updateTextField("dashboardTitle", event.target.value)
+                        }
+                        className={inputStyle}
+                        placeholder="AI Task Management Dashboard"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Administrator Profile
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Information displayed beside the Setting icon.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="administratorName"
+                        className="text-sm font-medium text-slate-700"
+                      >
+                        Administrator Name
+                      </label>
+
+                      <input
+                        id="administratorName"
+                        value={settings.administratorName}
+                        onChange={(event) =>
+                          updateTextField(
+                            "administratorName",
+                            event.target.value,
+                          )
+                        }
+                        className={inputStyle}
+                        placeholder="Administrator"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="operationsTeam"
+                        className="text-sm font-medium text-slate-700"
+                      >
+                        Department / Team
+                      </label>
+
+                      <input
+                        id="operationsTeam"
+                        value={settings.operationsTeam}
+                        onChange={(event) =>
+                          updateTextField("operationsTeam", event.target.value)
+                        }
+                        className={inputStyle}
+                        placeholder="Operations Team"
+                      />
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {activeCategory === "job-dashboard" && (
+              <>
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Job Information Sheet Column Order
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Drag columns into the required order, or use the arrow
+                      buttons. The first item will appear on the left side of
+                      the table.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 space-y-2">
+                    {settings.columnOrder.map((column, index) => (
+                      <div
+                        key={column}
+                        draggable
+                        onDragStart={() => setDraggedColumn(column)}
+                        onDragEnd={() => setDraggedColumn(null)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => dropColumn(column)}
+                        className={`flex cursor-grab items-center gap-3 rounded-xl border px-3 py-3 transition active:cursor-grabbing ${
+                          draggedColumn === column
+                            ? "border-blue-400 bg-blue-50 opacity-60"
+                            : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/50"
+                        }`}
+                      >
+                        <span
+                          className="select-none text-lg font-bold tracking-[-0.2em] text-slate-400"
+                          aria-hidden="true"
+                        >
+                          ⋮⋮
+                        </span>
+
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-semibold text-slate-500 shadow-sm">
+                          {index + 1}
+                        </span>
+
+                        <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
+                          {JOB_COLUMN_LABELS[column]}
+                        </span>
+
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => moveColumn(column, -1)}
+                            disabled={index === 0}
+                            aria-label={`Move ${JOB_COLUMN_LABELS[column]} left`}
+                            title="Move left in table"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            ↑
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => moveColumn(column, 1)}
+                            disabled={index === settings.columnOrder.length - 1}
+                            aria-label={`Move ${JOB_COLUMN_LABELS[column]} right`}
+                            title="Move right in table"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Appearance
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Choose the preferred colour mode. System follows the
+                      current Chrome or device appearance.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <AppearanceOption
+                      value="system"
+                      title="System"
+                      description="Follow Chrome or device"
+                      selected={settings.appearance === "system"}
+                      onSelect={(value) => {
+                        setSettings((current) => ({
+                          ...current,
+                          appearance: value,
+                        }));
+                        setSaved(false);
+                      }}
+                    />
+                    <AppearanceOption
+                      value="light"
+                      title="Light Mode"
+                      description="Always use light mode"
+                      selected={settings.appearance === "light"}
+                      onSelect={(value) => {
+                        setSettings((current) => ({
+                          ...current,
+                          appearance: value,
+                        }));
+                        setSaved(false);
+                      }}
+                    />
+                    <AppearanceOption
+                      value="dark"
+                      title="Dark Mode"
+                      description="Always use dark mode"
+                      selected={settings.appearance === "dark"}
+                      onSelect={(value) => {
+                        setSettings((current) => ({
+                          ...current,
+                          appearance: value,
+                        }));
+                        setSaved(false);
+                      }}
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Dashboard Display
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Choose which information appears on the dashboard.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 divide-y divide-slate-100">
+                    <SettingToggle
+                      title="Show Stage Legend"
+                      description="Display the colour legend on the right side of the Job Progress Board."
+                      checked={settings.showStageLegend}
+                      onChange={(checked) =>
+                        updateToggle("showStageLegend", checked)
+                      }
+                    />
+
+                    <SettingToggle
+                      title="Show Summary"
+                      description="Display the status totals and overall job total."
+                      checked={settings.showSummary}
+                      onChange={(checked) =>
+                        updateToggle("showSummary", checked)
+                      }
+                    />
+
+                    <SettingToggle
+                      title="Automatic Completion Date"
+                      description="Automatically record the date and time when a job moves to Completed."
+                      checked={settings.autoCompleteDate}
+                      onChange={(checked) =>
+                        updateToggle("autoCompleteDate", checked)
+                      }
+                    />
+                  </div>
+                </section>
+              </>
+            )}
+
+            {saved && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                Settings saved successfully.
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Reset Default
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Back to Dashboard
+              </button>
+
+              <button
+                type="submit"
+                className="h-11 rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Save Settings
+              </button>
             </div>
-          </section>
-
-          {saved && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-              Settings saved successfully.
-            </div>
-          )}
-
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              Reset Default
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              Back to Dashboard
-            </button>
-
-            <button
-              type="submit"
-              className="h-11 rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              Save Settings
-            </button>
           </div>
         </form>
       </div>
     </main>
+  );
+}
+
+function AppearanceOption({
+  value,
+  title,
+  description,
+  selected,
+  onSelect,
+}: {
+  value: DashboardSettings["appearance"];
+  title: string;
+  description: string;
+  selected: boolean;
+  onSelect: (value: DashboardSettings["appearance"]) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={() => onSelect(value)}
+      className={`rounded-xl border p-4 text-left transition ${
+        selected
+          ? "border-blue-500 bg-blue-50 ring-4 ring-blue-500/10"
+          : "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
+      }`}
+    >
+      <span className="flex items-center justify-between gap-3">
+        <span
+          className={`text-sm font-semibold ${
+            selected ? "text-blue-700" : "text-slate-800"
+          }`}
+        >
+          {title}
+        </span>
+        <span
+          className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+            selected ? "border-blue-600 bg-blue-600" : "border-slate-300"
+          }`}
+        >
+          {selected && (
+            <span
+              className="h-2 w-2 rounded-full bg-white"
+              aria-hidden="true"
+            />
+          )}
+        </span>
+      </span>
+      <span className="mt-2 block text-xs leading-5 text-slate-500">
+        {description}
+      </span>
+    </button>
   );
 }
 
