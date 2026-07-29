@@ -3,6 +3,70 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+const JOB_COLUMN_KEYS = [
+  "jobId",
+  "jobInDateTime",
+  "salesPerson",
+  "salesPersonPhone",
+  "customerStatus",
+  "customerName",
+  "customerPhone",
+  "customerCompanyName",
+  "assignedTechnician",
+  "technicianPhone",
+  "description",
+  "status",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "statusRemark",
+  "jobCompleteDateTime",
+  "invoiceNo",
+  "reportNo",
+  "collectionDateTime",
+] as const;
+
+type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
+
+const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
+  jobId: "Job ID",
+  jobInDateTime: "Job In Date & Time",
+  salesPerson: "Sales Person",
+  salesPersonPhone: "Sales Person Phone",
+  customerStatus: "Customer Status",
+  customerName: "Customer Name",
+  customerPhone: "Customer Phone",
+  customerCompanyName: "Customer Company Name",
+  assignedTechnician: "Assigned Technician",
+  technicianPhone: "Technician Phone",
+  description: "Description / Item",
+  status: "Status",
+  inProgressStartDateTime: "In Progress Start Date & Time",
+  inProgressEndDateTime: "In Progress End Date & Time",
+  statusRemark: "Status Remark / Issue",
+  jobCompleteDateTime: "Job Complete Date & Time",
+  invoiceNo: "Invoice No.",
+  reportNo: "Report No.",
+  collectionDateTime: "Collection Date & Time",
+};
+
+const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
+
+function normalizeColumnOrder(value: unknown): JobColumnKey[] {
+  const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
+  const savedKeys = Array.isArray(value)
+    ? value.filter(
+        (key): key is JobColumnKey =>
+          typeof key === "string" && validKeys.has(key as JobColumnKey),
+      )
+    : [];
+  const uniqueSavedKeys = Array.from(new Set(savedKeys));
+
+  return [
+    ...uniqueSavedKeys,
+    ...JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
+  ];
+}
+
 type DashboardSettings = {
   companyName: string;
   dashboardTitle: string;
@@ -11,6 +75,7 @@ type DashboardSettings = {
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
+  columnOrder: JobColumnKey[];
 };
 
 const DEFAULT_SETTINGS: DashboardSettings = {
@@ -21,6 +86,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
+  columnOrder: DEFAULT_COLUMN_ORDER,
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
@@ -67,6 +133,8 @@ export default function SettingsPage() {
   const [settings, setSettings] =
     useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [draggedColumn, setDraggedColumn] =
+    useState<JobColumnKey | null>(null);
 
   useEffect(() => {
     try {
@@ -75,9 +143,14 @@ export default function SettingsPage() {
       );
 
       if (savedSettings) {
+        const parsedSettings = JSON.parse(
+          savedSettings,
+        ) as Partial<DashboardSettings>;
+
         setSettings({
           ...DEFAULT_SETTINGS,
-          ...JSON.parse(savedSettings),
+          ...parsedSettings,
+          columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
         });
       }
     } catch {
@@ -112,11 +185,18 @@ export default function SettingsPage() {
   function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const normalizedSettings = {
+      ...settings,
+      columnOrder: normalizeColumnOrder(settings.columnOrder),
+    };
+
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify(settings),
+      JSON.stringify(normalizedSettings),
     );
 
+    setSettings(normalizedSettings);
+    window.dispatchEvent(new Event("aec-settings-updated"));
     setSaved(true);
   }
 
@@ -126,7 +206,56 @@ export default function SettingsPage() {
       SETTINGS_STORAGE_KEY,
       JSON.stringify(DEFAULT_SETTINGS),
     );
+    window.dispatchEvent(new Event("aec-settings-updated"));
     setSaved(true);
+  }
+
+  function moveColumn(column: JobColumnKey, direction: -1 | 1) {
+    setSettings((current) => {
+      const currentIndex = current.columnOrder.indexOf(column);
+      const newIndex = currentIndex + direction;
+
+      if (currentIndex < 0 || newIndex < 0 || newIndex >= current.columnOrder.length) {
+        return current;
+      }
+
+      const nextOrder = [...current.columnOrder];
+      [nextOrder[currentIndex], nextOrder[newIndex]] = [
+        nextOrder[newIndex],
+        nextOrder[currentIndex],
+      ];
+
+      return {
+        ...current,
+        columnOrder: nextOrder,
+      };
+    });
+
+    setSaved(false);
+  }
+
+  function dropColumn(targetColumn: JobColumnKey) {
+    if (!draggedColumn || draggedColumn === targetColumn) {
+      setDraggedColumn(null);
+      return;
+    }
+
+    setSettings((current) => {
+      const nextOrder = current.columnOrder.filter(
+        (column) => column !== draggedColumn,
+      );
+      const targetIndex = nextOrder.indexOf(targetColumn);
+
+      nextOrder.splice(targetIndex, 0, draggedColumn);
+
+      return {
+        ...current,
+        columnOrder: nextOrder,
+      };
+    });
+
+    setDraggedColumn(null);
+    setSaved(false);
   }
 
   const inputStyle =
@@ -329,6 +458,76 @@ export default function SettingsPage() {
                   updateToggle("autoCompleteDate", checked)
                 }
               />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="border-b border-slate-100 pb-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Job Information Sheet Column Order
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Drag columns into the required order, or use the arrow buttons.
+                The first item will appear on the left side of the table.
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-2">
+              {settings.columnOrder.map((column, index) => (
+                <div
+                  key={column}
+                  draggable
+                  onDragStart={() => setDraggedColumn(column)}
+                  onDragEnd={() => setDraggedColumn(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => dropColumn(column)}
+                  className={`flex cursor-grab items-center gap-3 rounded-xl border px-3 py-3 transition active:cursor-grabbing ${
+                    draggedColumn === column
+                      ? "border-blue-400 bg-blue-50 opacity-60"
+                      : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/50"
+                  }`}
+                >
+                  <span
+                    className="select-none text-lg font-bold tracking-[-0.2em] text-slate-400"
+                    aria-hidden="true"
+                  >
+                    ⋮⋮
+                  </span>
+
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-semibold text-slate-500 shadow-sm">
+                    {index + 1}
+                  </span>
+
+                  <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
+                    {JOB_COLUMN_LABELS[column]}
+                  </span>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveColumn(column, -1)}
+                      disabled={index === 0}
+                      aria-label={`Move ${JOB_COLUMN_LABELS[column]} left`}
+                      title="Move left in table"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      ↑
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => moveColumn(column, 1)}
+                      disabled={index === settings.columnOrder.length - 1}
+                      aria-label={`Move ${JOB_COLUMN_LABELS[column]} right`}
+                      title="Move right in table"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
 

@@ -52,6 +52,70 @@ type Job = {
   collectionDateTime: string;
 };
 
+const JOB_COLUMN_KEYS = [
+  "jobId",
+  "jobInDateTime",
+  "salesPerson",
+  "salesPersonPhone",
+  "customerStatus",
+  "customerName",
+  "customerPhone",
+  "customerCompanyName",
+  "assignedTechnician",
+  "technicianPhone",
+  "description",
+  "status",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "statusRemark",
+  "jobCompleteDateTime",
+  "invoiceNo",
+  "reportNo",
+  "collectionDateTime",
+] as const;
+
+type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
+
+const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
+  jobId: "Job ID",
+  jobInDateTime: "Job In Date & Time",
+  salesPerson: "Sales Person",
+  salesPersonPhone: "Sales Person Phone",
+  customerStatus: "Customer Status",
+  customerName: "Customer Name",
+  customerPhone: "Customer Phone",
+  customerCompanyName: "Customer Company Name",
+  assignedTechnician: "Assigned Technician",
+  technicianPhone: "Technician Phone",
+  description: "Description / Item",
+  status: "Status",
+  inProgressStartDateTime: "In Progress Start Date & Time",
+  inProgressEndDateTime: "In Progress End Date & Time",
+  statusRemark: "Status Remark / Issue",
+  jobCompleteDateTime: "Job Complete Date & Time",
+  invoiceNo: "Invoice No.",
+  reportNo: "Report No.",
+  collectionDateTime: "Collection Date & Time",
+};
+
+const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
+
+function normalizeColumnOrder(value: unknown): JobColumnKey[] {
+  const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
+  const savedKeys = Array.isArray(value)
+    ? value.filter(
+        (key): key is JobColumnKey =>
+          typeof key === "string" && validKeys.has(key as JobColumnKey),
+      )
+    : [];
+  const uniqueSavedKeys = Array.from(new Set(savedKeys));
+
+  return [
+    ...uniqueSavedKeys,
+    ...JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
+  ];
+}
+
 /* =========================================================
    Initial Job Data
 
@@ -200,6 +264,7 @@ type DashboardSettings = {
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
+  columnOrder: JobColumnKey[];
 };
 
 const DEFAULT_SETTINGS: DashboardSettings = {
@@ -210,6 +275,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
+  columnOrder: DEFAULT_COLUMN_ORDER,
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
@@ -356,29 +422,13 @@ function StatusIcon({ status }: { status: JobStatus }) {
    Read-only Job Table Sheet
 ========================================================= */
 
-function JobDataTable({ jobs }: { jobs: Job[] }) {
-  const columns = [
-    "Job ID",
-    "Job In Date & Time",
-    "Sales Person",
-    "Sales Person Phone",
-    "Customer Status",
-    "Customer Name",
-    "Customer Phone",
-    "Customer Company Name",
-    "Assigned Technician",
-    "Technician Phone",
-    "Description / Item",
-    "Status",
-    "In Progress Start Date & Time",
-    "In Progress End Date & Time",
-    "Status Remark / Issue",
-    "Job Complete Date & Time",
-    "Invoice No.",
-    "Report No.",
-    "Collection Date & Time",
-  ];
-
+function JobDataTable({
+  jobs,
+  columnOrder,
+}: {
+  jobs: Job[];
+  columnOrder: JobColumnKey[];
+}) {
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -401,13 +451,13 @@ function JobDataTable({ jobs }: { jobs: Job[] }) {
         <table className="w-full min-w-[3300px] border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              {columns.map((column) => (
+              {columnOrder.map((column) => (
                 <th
                   key={column}
                   scope="col"
                   className="whitespace-nowrap border-r border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600 last:border-r-0"
                 >
-                  {column}
+                  {JOB_COLUMN_LABELS[column]}
                 </th>
               ))}
             </tr>
@@ -416,8 +466,6 @@ function JobDataTable({ jobs }: { jobs: Job[] }) {
           <tbody>
             {jobs.length > 0 ? (
               jobs.map((job, index) => {
-                const styles = statusStyles[job.status];
-
                 return (
                   <tr
                     key={job.jobId}
@@ -425,64 +473,20 @@ function JobDataTable({ jobs }: { jobs: Job[] }) {
                       index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                     }`}
                   >
-                    <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3 text-sm font-semibold text-blue-600">
-                      {job.jobId || "-"}
-                    </td>
-
-                    <TableCell
-                      value={formatDisplayDateTime(job.jobInDateTime)}
-                    />
-                    <TableCell value={job.salesPerson} />
-                    <TableCell value={job.salesPersonPhone} />
-
-                    <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles.customerBadge}`}
-                      >
-                        {job.customerStatus || "-"}
-                      </span>
-                    </td>
-
-                    <TableCell value={job.customerName} emphasized />
-                    <TableCell value={job.customerPhone} />
-                    <TableCell value={job.customerCompanyName} />
-                    <TableCell value={job.assignedTechnician} />
-                    <TableCell value={job.technicianPhone} />
-                    <TableCell value={job.description} wide />
-
-                    <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
-                      <span
-                        className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles.calendar}`}
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full ${styles.dot}`}
-                        />
-                        {displayLabels[job.status]}
-                      </span>
-                    </td>
-
-                    <TableCell
-                      value={formatDisplayDateTime(job.inProgressStartDateTime)}
-                    />
-                    <TableCell
-                      value={formatDisplayDateTime(job.inProgressEndDateTime)}
-                    />
-                    <TableCell value={job.statusRemark} wide />
-                    <TableCell
-                      value={formatDisplayDateTime(job.jobCompleteDateTime)}
-                    />
-                    <TableCell value={job.invoiceNo} />
-                    <TableCell value={job.reportNo} />
-                    <TableCell
-                      value={formatDisplayDateTime(job.collectionDateTime)}
-                    />
+                    {columnOrder.map((column) => (
+                      <JobTableCell
+                        key={`${job.jobId}-${column}`}
+                        job={job}
+                        column={column}
+                      />
+                    ))}
                   </tr>
                 );
               })
             ) : (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={columnOrder.length}
                   className="px-5 py-12 text-center text-sm text-slate-400"
                 >
                   No job records available
@@ -493,6 +497,68 @@ function JobDataTable({ jobs }: { jobs: Job[] }) {
         </table>
       </div>
     </section>
+  );
+}
+
+function JobTableCell({
+  job,
+  column,
+}: {
+  job: Job;
+  column: JobColumnKey;
+}) {
+  const styles = statusStyles[job.status];
+
+  if (column === "jobId") {
+    return (
+      <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3 text-sm font-semibold text-blue-600">
+        {job.jobId || "-"}
+      </td>
+    );
+  }
+
+  if (column === "customerStatus") {
+    return (
+      <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles.customerBadge}`}
+        >
+          {job.customerStatus || "-"}
+        </span>
+      </td>
+    );
+  }
+
+  if (column === "status") {
+    return (
+      <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
+        <span
+          className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles.calendar}`}
+        >
+          <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
+          {displayLabels[job.status]}
+        </span>
+      </td>
+    );
+  }
+
+  const dateTimeColumns: JobColumnKey[] = [
+    "jobInDateTime",
+    "inProgressStartDateTime",
+    "inProgressEndDateTime",
+    "jobCompleteDateTime",
+    "collectionDateTime",
+  ];
+  const value = dateTimeColumns.includes(column)
+    ? formatDisplayDateTime(job[column])
+    : job[column];
+
+  return (
+    <TableCell
+      value={value}
+      emphasized={column === "customerName"}
+      wide={column === "description" || column === "statusRemark"}
+    />
   );
 }
 
@@ -876,18 +942,42 @@ export default function DashboardPage() {
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
   useEffect(() => {
-    try {
-      const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    function loadSettings() {
+      try {
+        const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
 
-      if (savedSettings) {
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...JSON.parse(savedSettings),
-        });
+        if (savedSettings) {
+          const parsedSettings = JSON.parse(
+            savedSettings,
+          ) as Partial<DashboardSettings>;
+
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...parsedSettings,
+            columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
+          });
+        } else {
+          setSettings(DEFAULT_SETTINGS);
+        }
+      } catch {
+        setSettings(DEFAULT_SETTINGS);
       }
-    } catch {
-      setSettings(DEFAULT_SETTINGS);
     }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === SETTINGS_STORAGE_KEY) {
+        loadSettings();
+      }
+    }
+
+    loadSettings();
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("aec-settings-updated", loadSettings);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("aec-settings-updated", loadSettings);
+    };
   }, []);
 
   useEffect(() => {
@@ -1200,7 +1290,7 @@ export default function DashboardPage() {
 
         {/* Read-only Job Table Sheet */}
 
-        <JobDataTable jobs={jobs} />
+        <JobDataTable jobs={jobs} columnOrder={settings.columnOrder} />
 
         {/* Job Progress Board */}
 
