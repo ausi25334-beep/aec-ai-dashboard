@@ -125,7 +125,7 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
 ========================================================= */
 
 const JOBS_TABLE = "aec-dashboard";
-const STAFF_TABLE = "saec-dashboard-admin";
+const STAFF_TABLE = "aec-dashboard-admin";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
