@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
 /* =========================================================
    Job Types
@@ -117,140 +118,161 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
 }
 
 /* =========================================================
-   Initial Job Data
+   Supabase Connection
 
-   如果你已经有真正的 Job 资料，
-   请把你原本的 initialJobs 资料复制回来。
+   Both tables use the SAME Supabase project, URL and publishable key.
+   Only change these two table names if your Supabase names are different.
 ========================================================= */
 
-const initialJobs: Job[] = [
-  {
-    jobId: "JOB-0101",
-    jobInDateTime: "2026-07-27 09:15",
-    salesPerson: "AEC Sales",
-    salesPersonPhone: "012-3456789",
-    customerStatus: "New Customer",
-    customerName: "One Box",
-    customerPhone: "012-1112233",
-    customerCompanyName: "One Box Sdn Bhd",
-    assignedTechnician: "Technician A",
-    technicianPhone: "012-5556677",
-    description: "Banner",
-    status: "New Job",
-    inProgressStartDateTime: "",
-    inProgressEndDateTime: "",
-    statusRemark: "",
-    jobCompleteDateTime: "",
-    invoiceNo: "",
-    reportNo: "",
-    collectionDateTime: "",
-  },
-  {
-    jobId: "JOB-0102",
-    jobInDateTime: "2026-07-27 10:30",
-    salesPerson: "AEC Sales",
-    salesPersonPhone: "012-3456789",
-    customerStatus: "Existing Customer",
-    customerName: "Pearl Travel",
-    customerPhone: "012-2223344",
-    customerCompanyName: "Pearl Travel Sdn Bhd",
-    assignedTechnician: "Technician B",
-    technicianPhone: "012-6667788",
-    description: "Flyer",
-    status: "Pending Quotation",
-    inProgressStartDateTime: "2026-07-27 13:00",
-    inProgressEndDateTime: "2026-07-29 17:00",
-    statusRemark: "",
-    jobCompleteDateTime: "",
-    invoiceNo: "",
-    reportNo: "",
-    collectionDateTime: "",
-  },
-  {
-    jobId: "JOB-0103",
-    jobInDateTime: "2026-07-28 11:45",
-    salesPerson: "AEC Sales",
-    salesPersonPhone: "012-3456789",
-    customerStatus: "New Customer",
-    customerName: "Spine Joing",
-    customerPhone: "012-3334455",
-    customerCompanyName: "Spine Joing",
-    assignedTechnician: "",
-    technicianPhone: "",
-    description: "Roll Up",
-    status: "New Job",
-    inProgressStartDateTime: "",
-    inProgressEndDateTime: "",
-    statusRemark: "",
-    jobCompleteDateTime: "",
-    invoiceNo: "",
-    reportNo: "",
-    collectionDateTime: "",
-  },
-  {
-    jobId: "JOB-0104",
-    jobInDateTime: "2026-07-29 14:00",
-    salesPerson: "AEC Sales",
-    salesPersonPhone: "012-3456789",
-    customerStatus: "Existing Customer",
-    customerName: "Goreal",
-    customerPhone: "012-4445566",
-    customerCompanyName: "Goreal Sdn Bhd",
-    assignedTechnician: "Technician C",
-    technicianPhone: "012-7778899",
-    description: "Roll Up",
-    status: "Pending Parts",
-    inProgressStartDateTime: "2026-07-29 15:00",
-    inProgressEndDateTime: "",
-    statusRemark: "",
-    jobCompleteDateTime: "",
-    invoiceNo: "",
-    reportNo: "",
-    collectionDateTime: "",
-  },
-  {
-    jobId: "JOB-0105",
-    jobInDateTime: "2026-07-30 09:00",
-    salesPerson: "AEC Sales",
-    salesPersonPhone: "012-3456789",
-    customerStatus: "Existing Customer",
-    customerName: "Classical Art",
-    customerPhone: "012-5556677",
-    customerCompanyName: "Classical Art",
-    assignedTechnician: "Technician A",
-    technicianPhone: "012-5556677",
-    description: "Door Board",
-    status: "Pending Invoice",
-    inProgressStartDateTime: "",
-    inProgressEndDateTime: "",
-    statusRemark: "",
-    jobCompleteDateTime: "",
-    invoiceNo: "",
-    reportNo: "",
-    collectionDateTime: "",
-  },
-  {
-    jobId: "JOB-0106",
-    jobInDateTime: "2026-07-31 15:30",
-    salesPerson: "AEC Sales",
-    salesPersonPhone: "012-3456789",
-    customerStatus: "Existing Customer",
-    customerName: "Money Render",
-    customerPhone: "012-8889900",
-    customerCompanyName: "Money Render",
-    assignedTechnician: "Technician D",
-    technicianPhone: "012-9990011",
-    description: "Bill Book",
-    status: "Complete",
-    inProgressStartDateTime: "2026-07-31 15:45",
-    inProgressEndDateTime: "",
-    statusRemark: "",
-    jobCompleteDateTime: "2026-07-31 17:30",
-    invoiceNo: "INV-1006",
-    reportNo: "RPT-1006",
-    collectionDateTime: "2026-08-01 10:00",
-  },
-];
+const JOBS_TABLE = "job";
+const STAFF_TABLE = "staff";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase =
+  supabaseUrl && supabaseKey
+    ? createClient(supabaseUrl, supabaseKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      })
+    : null;
+
+type SupabaseRow = Record<string, unknown>;
+
+function readText(row: SupabaseRow, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+
+    if (value !== null && value !== undefined) {
+      return String(value);
+    }
+  }
+
+  return "";
+}
+
+function normalizeDateTime(value: string) {
+  if (!value.trim()) return "";
+
+  return value.trim().replace("T", " ").slice(0, 16);
+}
+
+function normalizeJobStatus(value: string): JobStatus {
+  const normalized = value.trim().toLowerCase();
+  const aliases: Record<string, JobStatus> = {
+    "new job": "New Job",
+    "new jobs": "New Job",
+    "claim warranty": "Claim Warranty",
+    "pending invoice": "Pending Invoice",
+    "pending parts": "Pending Parts",
+    "pending quotation": "Pending Quotation",
+    "pending spec parts": "Pending Spec Parts",
+    complete: "Complete",
+    completed: "Complete",
+  };
+
+  return aliases[normalized] || "New Job";
+}
+
+function mapJobRow(row: SupabaseRow): Job {
+  return {
+    jobId: readText(row, ["job_id", "jobId", "Job ID", "id"]),
+    jobInDateTime: normalizeDateTime(
+      readText(row, [
+        "job_in_datetime",
+        "jobInDateTime",
+        "Job In Date & Time",
+      ]),
+    ),
+    salesPerson: readText(row, [
+      "sales_person",
+      "salesPerson",
+      "Sales Person",
+    ]),
+    salesPersonPhone: readText(row, [
+      "sales_person_phone",
+      "salesPersonPhone",
+      "Sales Person Phone",
+    ]),
+    customerStatus: readText(row, [
+      "customer_status",
+      "customerStatus",
+      "Customer Status",
+    ]),
+    customerName: readText(row, [
+      "customer_name",
+      "customerName",
+      "Customer Name",
+    ]),
+    customerPhone: readText(row, [
+      "customer_phone",
+      "customerPhone",
+      "Customer Phone",
+    ]),
+    customerCompanyName: readText(row, [
+      "customer_company_name",
+      "customerCompanyName",
+      "Customer Company Name",
+    ]),
+    assignedTechnician: readText(row, [
+      "assigned_technician",
+      "assignedTechnician",
+      "Assigned Technician",
+    ]),
+    technicianPhone: readText(row, [
+      "technician_phone",
+      "technicianPhone",
+      "Technician Phone",
+    ]),
+    description: readText(row, [
+      "description_item",
+      "description",
+      "Description / Item",
+    ]),
+    status: normalizeJobStatus(readText(row, ["status", "Status"])),
+    inProgressStartDateTime: normalizeDateTime(
+      readText(row, [
+        "in_progress_start_datetime",
+        "inProgressStartDateTime",
+        "In Progress Start Date & Time",
+      ]),
+    ),
+    inProgressEndDateTime: normalizeDateTime(
+      readText(row, [
+        "in_progress_end_datetime",
+        "inProgressEndDateTime",
+        "In Progress End Date & Time",
+      ]),
+    ),
+    statusRemark: readText(row, [
+      "status_remark_issue",
+      "status_remark",
+      "statusRemark",
+      "Status Remark / Issue",
+    ]),
+    jobCompleteDateTime: normalizeDateTime(
+      readText(row, [
+        "job_complete_datetime",
+        "jobCompleteDateTime",
+        "Job Complete Date & Time",
+      ]),
+    ),
+    invoiceNo: readText(row, ["invoice_no", "invoiceNo", "Invoice No."]),
+    reportNo: readText(row, ["report_no", "reportNo", "Report No."]),
+    collectionDateTime: normalizeDateTime(
+      readText(row, [
+        "collection_datetime",
+        "collectionDateTime",
+        "Collection Date & Time",
+      ]),
+    ),
+  };
+}
 
 /* =========================================================
    Settings
@@ -611,7 +633,21 @@ type Staff = {
   position: string;
 };
 
-const STAFF_STORAGE_KEY = "aec-dashboard-staff";
+function mapStaffRow(row: SupabaseRow, index: number): Staff {
+  return {
+    id:
+      readText(row, ["id", "staff_id", "staffId", "Staff ID"]) ||
+      `staff-${index}`,
+    name: readText(row, ["name", "staff_name", "staffName", "Name"]),
+    phone: readText(row, [
+      "phone",
+      "phone_number",
+      "phoneNumber",
+      "Phone Number",
+    ]),
+    position: readText(row, ["position", "Position"]),
+  };
+}
 
 /* =========================================================
    Status Settings
@@ -967,10 +1003,12 @@ function ChevronRightIcon() {
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [jobs] = useState<Job[]>(initialJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [dataIsLoading, setDataIsLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -1066,28 +1104,91 @@ export default function DashboardPage() {
   }, [darkModeIsActive]);
 
   useEffect(() => {
-    try {
-      const savedStaff = window.localStorage.getItem(STAFF_STORAGE_KEY);
+    let componentIsMounted = true;
 
-      if (savedStaff) {
-        const parsedStaff = JSON.parse(savedStaff) as Staff[];
-
-        if (Array.isArray(parsedStaff)) {
-          /*
-            Keep old saved staff records compatible.
-            Staff created before Position was added will receive an empty value.
-          */
-          setStaff(
-            parsedStaff.map((staffMember) => ({
-              ...staffMember,
-              position: staffMember.position ?? "",
-            })),
-          );
-        }
+    async function loadSupabaseData(showLoading = true) {
+      if (showLoading && componentIsMounted) {
+        setDataIsLoading(true);
       }
-    } catch {
-      setStaff([]);
+
+      if (!supabase) {
+        if (componentIsMounted) {
+          setJobs([]);
+          setStaff([]);
+          setDataError(
+            "Supabase is not connected. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
+          );
+          setDataIsLoading(false);
+        }
+
+        return;
+      }
+
+      const [jobsResult, staffResult] = await Promise.all([
+        supabase.from(JOBS_TABLE).select("*"),
+        supabase.from(STAFF_TABLE).select("*"),
+      ]);
+
+      if (!componentIsMounted) return;
+
+      const errorMessages: string[] = [];
+
+      if (jobsResult.error) {
+        setJobs([]);
+        errorMessages.push(
+          `Cannot read "${JOBS_TABLE}" table: ${jobsResult.error.message}`,
+        );
+      } else {
+        const nextJobs = (jobsResult.data || [])
+          .map((row) => mapJobRow(row as SupabaseRow))
+          .sort((a, b) => b.jobInDateTime.localeCompare(a.jobInDateTime));
+
+        setJobs(nextJobs);
+      }
+
+      if (staffResult.error) {
+        setStaff([]);
+        errorMessages.push(
+          `Cannot read "${STAFF_TABLE}" table: ${staffResult.error.message}`,
+        );
+      } else {
+        const nextStaff = (staffResult.data || [])
+          .map((row, index) => mapStaffRow(row as SupabaseRow, index))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        setStaff(nextStaff);
+      }
+
+      setDataError(errorMessages.join(" "));
+      setDataIsLoading(false);
     }
+
+    void loadSupabaseData();
+
+    if (!supabase) {
+      return () => {
+        componentIsMounted = false;
+      };
+    }
+
+    const changesChannel = supabase
+      .channel("aec-dashboard-database-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: JOBS_TABLE },
+        () => void loadSupabaseData(false),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: STAFF_TABLE },
+        () => void loadSupabaseData(false),
+      )
+      .subscribe();
+
+    return () => {
+      componentIsMounted = false;
+      void supabase.removeChannel(changesChannel);
+    };
   }, []);
 
   const statusCounts = useMemo(() => {
@@ -1213,6 +1314,18 @@ export default function DashboardPage() {
       </header>
 
       <div className="mx-auto max-w-[1900px] px-5 py-7 lg:px-8">
+        {dataIsLoading && (
+          <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-medium text-blue-700 shadow-sm">
+            Loading Job and Staff data from Supabase...
+          </div>
+        )}
+
+        {dataError && (
+          <div className="mb-5 rounded-2xl border border-rose-300 bg-rose-50 px-5 py-4 text-sm font-medium leading-6 text-rose-700 shadow-sm">
+            {dataError}
+          </div>
+        )}
+
         {/* Status Categories */}
 
         <section className="space-y-4">
