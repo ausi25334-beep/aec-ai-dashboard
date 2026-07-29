@@ -364,6 +364,8 @@ type DashboardSettings = {
   operationsTeam: string;
   appearance: "system" | "light" | "dark";
   appearanceDefaultVersion: number;
+  language: string;
+  system: string;
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
@@ -386,6 +388,8 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   operationsTeam: "Operations Team",
   appearance: "light",
   appearanceDefaultVersion: 2,
+  language: "default",
+  system: "default",
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
@@ -393,6 +397,57 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
+const USER_SETTINGS_STORAGE_PREFIX = "aec-dashboard-user-settings:";
+
+type PerAccountSettings = Pick<
+  DashboardSettings,
+  | "operationsTeam"
+  | "appearance"
+  | "appearanceDefaultVersion"
+  | "language"
+  | "system"
+>;
+
+const DEFAULT_PER_ACCOUNT_SETTINGS: PerAccountSettings = {
+  operationsTeam: DEFAULT_SETTINGS.operationsTeam,
+  appearance: DEFAULT_SETTINGS.appearance,
+  appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
+  language: DEFAULT_SETTINGS.language,
+  system: DEFAULT_SETTINGS.system,
+};
+
+function getUserSettingsStorageKey(name: string) {
+  return `${USER_SETTINGS_STORAGE_PREFIX}${encodeURIComponent(
+    name.trim().toLowerCase(),
+  )}`;
+}
+
+function loadPerAccountSettings(name: string): PerAccountSettings {
+  try {
+    const storedValue = window.localStorage.getItem(
+      getUserSettingsStorageKey(name),
+    );
+
+    if (!storedValue) return DEFAULT_PER_ACCOUNT_SETTINGS;
+
+    const parsedValue = JSON.parse(storedValue) as Partial<PerAccountSettings>;
+
+    return {
+      ...DEFAULT_PER_ACCOUNT_SETTINGS,
+      ...parsedValue,
+      appearance:
+        parsedValue.appearance === "dark" ||
+        parsedValue.appearance === "system" ||
+        parsedValue.appearance === "light"
+          ? parsedValue.appearance
+          : DEFAULT_PER_ACCOUNT_SETTINGS.appearance,
+      appearanceDefaultVersion:
+        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+    };
+  } catch {
+    return DEFAULT_PER_ACCOUNT_SETTINGS;
+  }
+}
 
 /* =========================================================
    Dashboard Icons
@@ -1282,6 +1337,7 @@ export default function DashboardPage() {
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
+  const [currentUserName, setCurrentUserName] = useState("");
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [dataIsLoading, setDataIsLoading] = useState(true);
@@ -1303,45 +1359,86 @@ export default function DashboardPage() {
   }, [selectedJob]);
 
   useEffect(() => {
+    let mounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch("/api/auth/me", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          router.replace("/login");
+          router.refresh();
+          return;
+        }
+
+        const result = (await response.json()) as {
+          user?: { name?: string };
+        };
+        const name = result.user?.name?.trim();
+
+        if (!name) {
+          router.replace("/login");
+          router.refresh();
+          return;
+        }
+
+        if (mounted) setCurrentUserName(name);
+      } catch {
+        router.replace("/login");
+        router.refresh();
+      }
+    }
+
+    void loadCurrentUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    if (!currentUserName) return;
+
     function loadSettings() {
       try {
         const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+        const perAccountSettings =
+          loadPerAccountSettings(currentUserName);
 
         if (savedSettings) {
           const parsedSettings = JSON.parse(
             savedSettings,
           ) as Partial<DashboardSettings>;
 
-          const shouldUseNewLightDefault =
-            parsedSettings.appearanceDefaultVersion !==
-              DEFAULT_SETTINGS.appearanceDefaultVersion &&
-            parsedSettings.appearance === "system";
-
           const nextSettings: DashboardSettings = {
             ...DEFAULT_SETTINGS,
             ...parsedSettings,
-            appearance: shouldUseNewLightDefault
-              ? "light"
-              : parsedSettings.appearance || DEFAULT_SETTINGS.appearance,
-            appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
+            ...perAccountSettings,
             columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
           };
 
           setSettings(nextSettings);
-          window.localStorage.setItem(
-            SETTINGS_STORAGE_KEY,
-            JSON.stringify(nextSettings),
-          );
         } else {
-          setSettings(DEFAULT_SETTINGS);
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...perAccountSettings,
+          });
         }
       } catch {
-        setSettings(DEFAULT_SETTINGS);
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...loadPerAccountSettings(currentUserName),
+        });
       }
     }
 
     function handleStorage(event: StorageEvent) {
-      if (event.key === SETTINGS_STORAGE_KEY) {
+      if (
+        event.key === SETTINGS_STORAGE_KEY ||
+        event.key === getUserSettingsStorageKey(currentUserName)
+      ) {
         loadSettings();
       }
     }
@@ -1354,7 +1451,7 @@ export default function DashboardPage() {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("aec-settings-updated", loadSettings);
     };
-  }, []);
+  }, [currentUserName]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1601,14 +1698,7 @@ export default function DashboardPage() {
 
             <button
               type="button"
-              onClick={async () => {
-                await fetch("/api/auth/logout", {
-                  method: "POST",
-                });
-      
-                router.replace("/login");
-                router.refresh();
-              }}
+              onClick={() => router.push("/login")}
               className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
             >
               Sign Out

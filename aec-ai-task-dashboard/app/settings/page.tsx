@@ -82,6 +82,8 @@ type DashboardSettings = {
   operationsTeam: string;
   appearance: "system" | "light" | "dark";
   appearanceDefaultVersion: number;
+  language: string;
+  system: string;
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
@@ -112,6 +114,8 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   operationsTeam: "Operations Team",
   appearance: "light",
   appearanceDefaultVersion: 2,
+  language: "default",
+  system: "default",
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
@@ -119,6 +123,67 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
+const USER_SETTINGS_STORAGE_PREFIX = "aec-dashboard-user-settings:";
+
+type PerAccountSettings = Pick<
+  DashboardSettings,
+  | "operationsTeam"
+  | "appearance"
+  | "appearanceDefaultVersion"
+  | "language"
+  | "system"
+>;
+
+const DEFAULT_PER_ACCOUNT_SETTINGS: PerAccountSettings = {
+  operationsTeam: DEFAULT_SETTINGS.operationsTeam,
+  appearance: DEFAULT_SETTINGS.appearance,
+  appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
+  language: DEFAULT_SETTINGS.language,
+  system: DEFAULT_SETTINGS.system,
+};
+
+function getUserSettingsStorageKey(name: string) {
+  return `${USER_SETTINGS_STORAGE_PREFIX}${encodeURIComponent(
+    name.trim().toLowerCase(),
+  )}`;
+}
+
+function loadPerAccountSettings(name: string): PerAccountSettings {
+  try {
+    const savedValue = window.localStorage.getItem(
+      getUserSettingsStorageKey(name),
+    );
+
+    if (!savedValue) return DEFAULT_PER_ACCOUNT_SETTINGS;
+
+    const parsedValue = JSON.parse(savedValue) as Partial<PerAccountSettings>;
+
+    return {
+      ...DEFAULT_PER_ACCOUNT_SETTINGS,
+      ...parsedValue,
+      appearance:
+        parsedValue.appearance === "dark" ||
+        parsedValue.appearance === "system" ||
+        parsedValue.appearance === "light"
+          ? parsedValue.appearance
+          : DEFAULT_PER_ACCOUNT_SETTINGS.appearance,
+      appearanceDefaultVersion:
+        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+    };
+  } catch {
+    return DEFAULT_PER_ACCOUNT_SETTINGS;
+  }
+}
+
+function savePerAccountSettings(
+  name: string,
+  preferences: PerAccountSettings,
+) {
+  window.localStorage.setItem(
+    getUserSettingsStorageKey(name),
+    JSON.stringify(preferences),
+  );
+}
 
 function ArrowLeftIcon() {
   return (
@@ -246,39 +311,38 @@ export default function SettingsPage() {
   }, [router]);
 
   useEffect(() => {
+    if (!currentUser) return;
+
     try {
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      const perAccountSettings = loadPerAccountSettings(currentUser.name);
 
       if (savedSettings) {
         const parsedSettings = JSON.parse(
           savedSettings,
         ) as Partial<DashboardSettings>;
 
-        const shouldUseNewLightDefault =
-          parsedSettings.appearanceDefaultVersion !==
-            DEFAULT_SETTINGS.appearanceDefaultVersion &&
-          parsedSettings.appearance === "system";
-
         const nextSettings: DashboardSettings = {
           ...DEFAULT_SETTINGS,
           ...parsedSettings,
-          appearance: shouldUseNewLightDefault
-            ? "light"
-            : parsedSettings.appearance || DEFAULT_SETTINGS.appearance,
-          appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
+          ...perAccountSettings,
           columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
         };
 
         setSettings(nextSettings);
-        window.localStorage.setItem(
-          SETTINGS_STORAGE_KEY,
-          JSON.stringify(nextSettings),
-        );
+      } else {
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...perAccountSettings,
+        });
       }
     } catch {
-      setSettings(DEFAULT_SETTINGS);
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...loadPerAccountSettings(currentUser.name),
+      });
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -336,16 +400,30 @@ export default function SettingsPage() {
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!currentUser) return;
 
     const normalizedSettings = {
       ...settings,
       columnOrder: normalizeColumnOrder(settings.columnOrder),
     };
 
+    const sharedSettings: DashboardSettings = {
+      ...normalizedSettings,
+      ...DEFAULT_PER_ACCOUNT_SETTINGS,
+    };
+
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify(normalizedSettings),
+      JSON.stringify(sharedSettings),
     );
+    savePerAccountSettings(currentUser.name, {
+      operationsTeam: normalizedSettings.operationsTeam,
+      appearance: normalizedSettings.appearance,
+      appearanceDefaultVersion:
+        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+      language: normalizedSettings.language,
+      system: normalizedSettings.system,
+    });
 
     setSettings(normalizedSettings);
     window.dispatchEvent(new Event("aec-settings-updated"));
@@ -417,9 +495,26 @@ export default function SettingsPage() {
     };
 
     setSettings(nextSettings);
+
+    if (currentUser) {
+      savePerAccountSettings(currentUser.name, {
+        operationsTeam: nextSettings.operationsTeam,
+        appearance: nextSettings.appearance,
+        appearanceDefaultVersion:
+          DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+        language: nextSettings.language,
+        system: nextSettings.system,
+      });
+    }
+
+    const sharedSettings: DashboardSettings = {
+      ...nextSettings,
+      ...DEFAULT_PER_ACCOUNT_SETTINGS,
+    };
+
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify(nextSettings),
+      JSON.stringify(sharedSettings),
     );
     window.dispatchEvent(new Event("aec-settings-updated"));
     setSaved(true);
@@ -1019,37 +1114,19 @@ function EmployeeThemeSettings({
   const [saved, setSaved] = useState(false);
 
   function saveTheme() {
-    let protectedSettings = DEFAULT_SETTINGS;
-
-    try {
-      const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-
-      if (savedSettings) {
-        const parsedSettings = JSON.parse(
-          savedSettings,
-        ) as Partial<DashboardSettings>;
-
-        protectedSettings = {
-          ...DEFAULT_SETTINGS,
-          ...parsedSettings,
-          columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
-        };
-      }
-    } catch {
-      protectedSettings = DEFAULT_SETTINGS;
-    }
-
-    const nextSettings: DashboardSettings = {
-      ...protectedSettings,
+    const currentPreferences = loadPerAccountSettings(currentUser.name);
+    const nextPreferences: PerAccountSettings = {
+      ...currentPreferences,
       appearance: settings.appearance,
-      appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
+      appearanceDefaultVersion:
+        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
     };
 
-    window.localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify(nextSettings),
-    );
-    setSettings(nextSettings);
+    savePerAccountSettings(currentUser.name, nextPreferences);
+    setSettings((current) => ({
+      ...current,
+      ...nextPreferences,
+    }));
     window.dispatchEvent(new Event("aec-settings-updated"));
     setSaved(true);
   }
