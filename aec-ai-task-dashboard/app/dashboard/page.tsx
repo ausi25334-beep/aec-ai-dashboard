@@ -1,16 +1,9 @@
 "use client";
 
-import {
-  type DragEvent,
-  type FormEvent,
-  type KeyboardEvent,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import EditJobModal, {
+import {
   type Job,
   type JobStatus,
   JOB_STATUSES,
@@ -235,44 +228,6 @@ function PositionIcon() {
       <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <path d="M3 12h18" />
       <path d="M10 12v2h4v-2" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="M3 6h18" />
-      <path d="M8 6V4h8v2" />
-      <path d="M19 6 18 21H6L5 6" />
-      <path d="M10 11v5" />
-      <path d="M14 11v5" />
     </svg>
   );
 }
@@ -517,18 +472,6 @@ const SHORT_WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
    Helper Functions
 ========================================================= */
 
-function getCurrentDateTime() {
-  const now = new Date();
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day} ${hour}:${minute}`;
-}
-
 function formatDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -555,34 +498,6 @@ function parseDateTime(value?: string) {
   const date = new Date(year, month - 1, day, hour, minute, 0, 0);
 
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function formatDateTimeValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day} ${hour}:${minute}`;
-}
-
-function getDateKeyDayNumber(dateKey: string) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-
-  if (!year || !month || !day) return null;
-
-  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
-}
-
-function shiftDateTimeByDays(value: string, days: number) {
-  const date = parseDateTime(value);
-
-  if (!date) return value;
-
-  date.setDate(date.getDate() + days);
-
-  return formatDateTimeValue(date);
 }
 
 function isJobScheduledOnDate(job: Job, dateKey: string) {
@@ -742,16 +657,12 @@ function ChevronRightIcon() {
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [jobs, setJobs] = useState<Job[]>(initialJobs);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [jobs] = useState<Job[]>(initialJobs);
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [staffStorageReady, setStaffStorageReady] = useState(false);
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
-  const [draggingJobId, setDraggingJobId] = useState<string | null>(null);
-  const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -790,16 +701,8 @@ export default function DashboardPage() {
       }
     } catch {
       setStaff([]);
-    } finally {
-      setStaffStorageReady(true);
     }
   }, []);
-
-  useEffect(() => {
-    if (!staffStorageReady) return;
-
-    window.localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staff));
-  }, [staff, staffStorageReady]);
 
   const statusCounts = useMemo(() => {
     return JOB_STATUSES.reduce(
@@ -843,151 +746,6 @@ export default function DashboardPage() {
     (total, item) => total + item.value,
     0,
   );
-
-  function handleSaveJob(updatedJob: Job, originalJobId: string) {
-    setJobs((currentJobs) =>
-      currentJobs.map((job) =>
-        job.jobId === originalJobId ? updatedJob : job,
-      ),
-    );
-
-    setSelectedJob(null);
-  }
-
-  function handleQuickStatusChange(jobId: string, nextStatus: JobStatus) {
-    setJobs((currentJobs) =>
-      currentJobs.map((job) => {
-        if (job.jobId !== jobId) return job;
-
-        let completionDateTime = job.jobCompleteDateTime ?? "";
-
-        if (
-          settings.autoCompleteDate &&
-          nextStatus === "Complete" &&
-          job.status !== "Complete" &&
-          completionDateTime.trim() === ""
-        ) {
-          completionDateTime = getCurrentDateTime();
-        }
-
-        return {
-          ...job,
-          status: nextStatus,
-          jobCompleteDateTime: completionDateTime,
-        };
-      }),
-    );
-  }
-
-  function handleAddStaff(name: string, phone: string, position: string) {
-    const trimmedName = name.trim();
-    const trimmedPhone = phone.trim();
-    const trimmedPosition = position.trim();
-
-    if (!trimmedName || !trimmedPhone || !trimmedPosition) return;
-
-    const staffId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `staff-${Date.now()}`;
-
-    setStaff((currentStaff) => [
-      ...currentStaff,
-      {
-        id: staffId,
-        name: trimmedName,
-        phone: trimmedPhone,
-        position: trimmedPosition,
-      },
-    ]);
-  }
-
-  function handleRemoveStaff(staffId: string) {
-    setStaff((currentStaff) =>
-      currentStaff.filter((staffMember) => staffMember.id !== staffId),
-    );
-  }
-
-  function handleCardKeyDown(event: KeyboardEvent<HTMLDivElement>, job: Job) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setSelectedJob(job);
-    }
-  }
-
-  function handleCalendarDragStart(
-    event: DragEvent<HTMLButtonElement>,
-    job: Job,
-    sourceDateKey: string,
-  ) {
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(
-      "application/json",
-      JSON.stringify({
-        jobId: job.jobId,
-        sourceDateKey,
-      }),
-    );
-
-    setDraggingJobId(job.jobId);
-  }
-
-  function handleCalendarDragEnd() {
-    setDraggingJobId(null);
-    setDragOverDateKey(null);
-  }
-
-  function handleCalendarDrop(
-    event: DragEvent<HTMLDivElement>,
-    targetDateKey: string,
-  ) {
-    event.preventDefault();
-
-    try {
-      const transferData = JSON.parse(
-        event.dataTransfer.getData("application/json"),
-      ) as {
-        jobId?: string;
-        sourceDateKey?: string;
-      };
-
-      if (!transferData.jobId || !transferData.sourceDateKey) return;
-
-      const sourceDayNumber = getDateKeyDayNumber(transferData.sourceDateKey);
-      const targetDayNumber = getDateKeyDayNumber(targetDateKey);
-
-      if (sourceDayNumber === null || targetDayNumber === null) return;
-
-      const dayDifference = targetDayNumber - sourceDayNumber;
-
-      setJobs((currentJobs) =>
-        currentJobs.map((job) => {
-          if (job.jobId !== transferData.jobId) return job;
-
-          /*
-            Move the whole appointment together. The original start/end
-            time and the total duration are preserved.
-          */
-          return {
-            ...job,
-            inProgressStartDateTime: shiftDateTimeByDays(
-              job.inProgressStartDateTime,
-              dayDifference,
-            ),
-            inProgressEndDateTime: shiftDateTimeByDays(
-              job.inProgressEndDateTime,
-              dayDifference,
-            ),
-          };
-        }),
-      );
-    } catch {
-      // Ignore invalid drag data from outside this calendar.
-    } finally {
-      setDraggingJobId(null);
-      setDragOverDateKey(null);
-    }
-  }
 
   function goToPreviousMonth() {
     setCalendarDate(
@@ -1094,11 +852,7 @@ export default function DashboardPage() {
 
         {/* Staff Directory */}
 
-        <StaffDirectory
-          staff={staff}
-          onAddStaff={handleAddStaff}
-          onRemoveStaff={handleRemoveStaff}
-        />
+        <StaffDirectory staff={staff} />
 
         {/* Automatic Job Calendar */}
 
@@ -1176,31 +930,10 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={calendarDay.dateKey}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                        setDragOverDateKey(calendarDay.dateKey);
-                      }}
-                      onDragLeave={(event) => {
-                        if (
-                          !event.currentTarget.contains(
-                            event.relatedTarget as Node,
-                          )
-                        ) {
-                          setDragOverDateKey((current) =>
-                            current === calendarDay.dateKey ? null : current,
-                          );
-                        }
-                      }}
-                      onDrop={(event) =>
-                        handleCalendarDrop(event, calendarDay.dateKey)
-                      }
-                      className={`min-h-[145px] rounded-xl border p-2 transition ${
-                        dragOverDateKey === calendarDay.dateKey
-                          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
-                          : calendarDay.isCurrentMonth
-                            ? "border-slate-200 bg-white"
-                            : "border-slate-100 bg-slate-50/70"
+                      className={`min-h-[145px] rounded-xl border p-2 ${
+                        calendarDay.isCurrentMonth
+                          ? "border-slate-200 bg-white"
+                          : "border-slate-100 bg-slate-50/70"
                       }`}
                     >
                       <div className="mb-2 flex items-center justify-between">
@@ -1225,41 +958,25 @@ export default function DashboardPage() {
 
                       <div className="space-y-1.5">
                         {dayJobs.slice(0, 4).map((job) => (
-                          <button
-                            type="button"
+                          <div
                             key={`${job.jobId}-${calendarDay.dateKey}`}
-                            draggable
                             title={`${job.jobId} - ${job.customerName} - ${
                               job.description
                             } | ${formatInProgressPeriod(
                               job.inProgressStartDateTime,
                               job.inProgressEndDateTime,
                             )}`}
-                            onClick={() => setSelectedJob(job)}
-                            onDragStart={(event) =>
-                              handleCalendarDragStart(
-                                event,
-                                job,
-                                calendarDay.dateKey,
-                              )
-                            }
-                            onDragEnd={handleCalendarDragEnd}
-                            className={`block w-full cursor-grab truncate rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition hover:brightness-95 active:cursor-grabbing ${
-                              draggingJobId === job.jobId ? "opacity-45" : ""
-                            } ${statusStyles[job.status].calendar}`}
+                            className={`block w-full truncate rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold ${statusStyles[job.status].calendar}`}
                           >
                             {job.customerName}
                             {job.description ? ` - ${job.description}` : ""}
-                          </button>
+                          </div>
                         ))}
 
                         {dayJobs.length > 4 && (
-                          <button
-                            type="button"
-                            className="w-full rounded-lg bg-slate-100 px-2 py-1.5 text-left text-[11px] font-semibold text-slate-500"
-                          >
+                          <div className="w-full rounded-lg bg-slate-100 px-2 py-1.5 text-left text-[11px] font-semibold text-slate-500">
                             +{dayJobs.length - 4} more jobs
-                          </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1394,11 +1111,7 @@ export default function DashboardPage() {
                         {statusJobs.map((job) => (
                           <div
                             key={job.jobId}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedJob(job)}
-                            onKeyDown={(event) => handleCardKeyDown(event, job)}
-                            className="min-w-0 cursor-pointer rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                            className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="truncate text-xs font-semibold text-blue-600">
@@ -1482,40 +1195,21 @@ export default function DashboardPage() {
                               </div>
                             </div>
 
-                            {/* External Status Selector */}
+                            {/* Read-only Status */}
 
-                            <div
-                              className="mt-4 border-t border-slate-100 pt-3"
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                            >
-                              <label
-                                htmlFor={`status-${job.jobId}`}
-                                className="mb-1.5 block text-[11px] font-medium text-slate-500"
-                              >
-                                Move to:
-                              </label>
+                            <div className="mt-4 border-t border-slate-100 pt-3">
+                              <p className="mb-1.5 text-[11px] font-medium text-slate-500">
+                                Current Status:
+                              </p>
 
-                              <select
-                                id={`status-${job.jobId}`}
-                                value={job.status}
-                                onChange={(event) =>
-                                  handleQuickStatusChange(
-                                    job.jobId,
-                                    event.target.value as JobStatus,
-                                  )
-                                }
-                                className={`h-10 w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 outline-none transition focus:ring-4 ${styles.selectFocus}`}
+                              <div
+                                className={`flex h-10 w-full items-center gap-2 rounded-lg border px-3 text-xs font-semibold ${styles.calendar}`}
                               >
-                                {JOB_STATUSES.map((statusOption) => (
-                                  <option
-                                    key={statusOption}
-                                    value={statusOption}
-                                  >
-                                    {displayLabels[statusOption]}
-                                  </option>
-                                ))}
-                              </select>
+                                <span
+                                  className={`h-2.5 w-2.5 rounded-full ${styles.dot}`}
+                                />
+                                {displayLabels[job.status]}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1534,13 +1228,6 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
-
-      <EditJobModal
-        job={selectedJob}
-        isOpen={selectedJob !== null}
-        onClose={() => setSelectedJob(null)}
-        onSave={handleSaveJob}
-      />
     </main>
   );
 }
@@ -1549,32 +1236,7 @@ export default function DashboardPage() {
    Staff Directory
 ========================================================= */
 
-function StaffDirectory({
-  staff,
-  onAddStaff,
-  onRemoveStaff,
-}: {
-  staff: Staff[];
-  onAddStaff: (name: string, phone: string, position: string) => void;
-  onRemoveStaff: (staffId: string) => void;
-}) {
-  const [staffName, setStaffName] = useState("");
-  const [staffPhone, setStaffPhone] = useState("");
-  const [staffPosition, setStaffPosition] = useState("");
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!staffName.trim() || !staffPhone.trim() || !staffPosition.trim()) {
-      return;
-    }
-
-    onAddStaff(staffName, staffPhone, staffPosition);
-    setStaffName("");
-    setStaffPhone("");
-    setStaffPosition("");
-  }
-
+function StaffDirectory({ staff }: { staff: Staff[] }) {
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 xl:flex-row xl:items-center xl:justify-between">
@@ -1590,7 +1252,7 @@ function StaffDirectory({
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Add and manage employee contact details
+                Employee contact details
               </p>
             </div>
           </div>
@@ -1601,105 +1263,7 @@ function StaffDirectory({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4"
-        >
-          <h3 className="text-sm font-semibold text-slate-900">
-            Add New Staff
-          </h3>
-
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Enter the employee&apos;s name, phone number and position.
-          </p>
-
-          <div className="mt-4 space-y-3">
-            <div>
-              <label
-                htmlFor="staff-name"
-                className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-              >
-                Staff Name
-              </label>
-
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <StaffIcon />
-                </span>
-
-                <input
-                  id="staff-name"
-                  type="text"
-                  required
-                  value={staffName}
-                  onChange={(event) => setStaffName(event.target.value)}
-                  placeholder="Enter staff name"
-                  className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="staff-phone"
-                className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-              >
-                Phone Number
-              </label>
-
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <PhoneIcon />
-                </span>
-
-                <input
-                  id="staff-phone"
-                  type="tel"
-                  required
-                  value={staffPhone}
-                  onChange={(event) => setStaffPhone(event.target.value)}
-                  placeholder="e.g. 012-3456789"
-                  className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="staff-position"
-                className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500"
-              >
-                Position
-              </label>
-
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <PositionIcon />
-                </span>
-
-                <input
-                  id="staff-position"
-                  type="text"
-                  required
-                  value={staffPosition}
-                  onChange={(event) => setStaffPosition(event.target.value)}
-                  placeholder="e.g. Sales Executive"
-                  className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20"
-            >
-              <PlusIcon />
-              Add Staff
-            </button>
-          </div>
-        </form>
-
+      <div className="p-5">
         <div className="min-w-0">
           {staff.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
@@ -1732,16 +1296,6 @@ function StaffDirectory({
                       </span>
                     </p>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => onRemoveStaff(staffMember.id)}
-                    title={`Remove ${staffMember.name}`}
-                    aria-label={`Remove ${staffMember.name}`}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-500/10"
-                  >
-                    <TrashIcon />
-                  </button>
                 </div>
               ))}
             </div>
@@ -1756,8 +1310,7 @@ function StaffDirectory({
               </p>
 
               <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
-                Use the form to add the first staff member, phone number and
-                position.
+                No employee information is currently available.
               </p>
             </div>
           )}
