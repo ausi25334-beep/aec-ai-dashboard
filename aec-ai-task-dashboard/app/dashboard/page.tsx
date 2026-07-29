@@ -263,6 +263,7 @@ type DashboardSettings = {
   administratorName: string;
   operationsTeam: string;
   appearance: "system" | "light" | "dark";
+  appearanceDefaultVersion: number;
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
@@ -283,7 +284,8 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
   operationsTeam: "Operations Team",
-  appearance: "system",
+  appearance: "light",
+  appearanceDefaultVersion: 2,
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
@@ -535,7 +537,9 @@ function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
     return (
       <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
         <span
-          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles.customerBadge}`}
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getCustomerStatusStyle(
+            job.customerStatus,
+          )}`}
         >
           {job.customerStatus || "-"}
         </span>
@@ -634,7 +638,8 @@ const statusStyles: Record<
     leftBorder: "border-l-blue-500",
     iconBackground: "bg-blue-500",
     selectFocus: "focus:border-blue-500 focus:ring-blue-500/10",
-    calendar: "border-blue-300 bg-blue-100 text-blue-800",
+    calendar:
+      "border-blue-700 bg-blue-600 text-white shadow-sm ring-1 ring-blue-500/30",
     customerBadge:
       "border border-blue-500 bg-blue-100 text-blue-800 shadow-sm ring-1 ring-blue-200",
     hex: "#3b82f6",
@@ -712,6 +717,20 @@ const statusStyles: Record<
     hex: "#10b981",
   },
 };
+
+const customerStatusStyles: Record<string, string> = {
+  "New Customer":
+    "border border-fuchsia-700 bg-fuchsia-600 text-white shadow-sm ring-1 ring-fuchsia-400/40",
+  "Existing Customer":
+    "border border-teal-700 bg-teal-600 text-white shadow-sm ring-1 ring-teal-400/40",
+};
+
+function getCustomerStatusStyle(customerStatus?: string) {
+  return (
+    customerStatusStyles[customerStatus || ""] ||
+    "border border-slate-500 bg-slate-600 text-white shadow-sm"
+  );
+}
 
 const displayLabels: Record<JobStatus, string> = {
   "New Job": "New Job",
@@ -966,11 +985,26 @@ export default function DashboardPage() {
             savedSettings,
           ) as Partial<DashboardSettings>;
 
-          setSettings({
+          const shouldUseNewLightDefault =
+            parsedSettings.appearanceDefaultVersion !==
+              DEFAULT_SETTINGS.appearanceDefaultVersion &&
+            parsedSettings.appearance === "system";
+
+          const nextSettings: DashboardSettings = {
             ...DEFAULT_SETTINGS,
             ...parsedSettings,
+            appearance: shouldUseNewLightDefault
+              ? "light"
+              : parsedSettings.appearance || DEFAULT_SETTINGS.appearance,
+            appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
             columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
-          });
+          };
+
+          setSettings(nextSettings);
+          window.localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(nextSettings),
+          );
         } else {
           setSettings(DEFAULT_SETTINGS);
         }
@@ -1189,7 +1223,11 @@ export default function DashboardPage() {
                   card.status === "New Job" || card.status === "Complete",
               )
               .map((card) => (
-                <StatisticCard key={card.status} {...card} />
+                <StatisticCard
+                  key={card.status}
+                  {...card}
+                  darkModeIsActive={darkModeIsActive}
+                />
               ))}
           </div>
 
@@ -1200,7 +1238,11 @@ export default function DashboardPage() {
                   card.status !== "New Job" && card.status !== "Complete",
               )
               .map((card) => (
-                <StatisticCard key={card.status} {...card} />
+                <StatisticCard
+                  key={card.status}
+                  {...card}
+                  darkModeIsActive={darkModeIsActive}
+                />
               ))}
           </div>
         </section>
@@ -1333,10 +1375,26 @@ export default function DashboardPage() {
                               job.inProgressStartDateTime,
                               job.inProgressEndDateTime,
                             )}`}
-                            className={`block w-full truncate rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold ${statusStyles[job.status].calendar}`}
+                            className={`block w-full rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold ${statusStyles[job.status].calendar}`}
                           >
-                            {job.customerName}
-                            {job.description ? ` - ${job.description}` : ""}
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-none ${getCustomerStatusStyle(
+                                  job.customerStatus,
+                                )}`}
+                              >
+                                {job.customerStatus || "Customer"}
+                              </span>
+
+                              <span className="truncate">
+                                {displayLabels[job.status]}
+                              </span>
+                            </span>
+
+                            <span className="mt-1 block truncate font-medium">
+                              {job.customerName}
+                              {job.description ? ` - ${job.description}` : ""}
+                            </span>
                           </div>
                         ))}
 
@@ -1490,7 +1548,9 @@ export default function DashboardPage() {
                               </span>
 
                               <span
-                                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${styles.customerBadge}`}
+                                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${getCustomerStatusStyle(
+                                  job.customerStatus,
+                                )}`}
                               >
                                 {job.customerStatus ||
                                   displayLabels[job.status]}
@@ -1829,18 +1889,22 @@ function StatisticCard({
   label,
   value,
   hex,
+  darkModeIsActive,
 }: {
   status: JobStatus;
   label: string;
   value: number;
   hex: string;
+  darkModeIsActive: boolean;
 }) {
+  const lowerPanelColor = darkModeIsActive ? "#0d1b2e" : "#ffffff";
+
   return (
     <div
       className="relative overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       style={{
         borderColor: `${hex}55`,
-        background: `linear-gradient(180deg, ${hex}22 0%, ${hex}22 50%, #ffffff 50%, #ffffff 100%)`,
+        background: `linear-gradient(180deg, ${hex}33 0%, ${hex}33 50%, ${lowerPanelColor} 50%, ${lowerPanelColor} 100%)`,
       }}
     >
       <div

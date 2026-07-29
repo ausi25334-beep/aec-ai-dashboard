@@ -74,6 +74,7 @@ type DashboardSettings = {
   administratorName: string;
   operationsTeam: string;
   appearance: "system" | "light" | "dark";
+  appearanceDefaultVersion: number;
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
@@ -96,7 +97,8 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
   operationsTeam: "Operations Team",
-  appearance: "system",
+  appearance: "light",
+  appearanceDefaultVersion: 2,
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
@@ -200,11 +202,26 @@ export default function SettingsPage() {
           savedSettings,
         ) as Partial<DashboardSettings>;
 
-        setSettings({
+        const shouldUseNewLightDefault =
+          parsedSettings.appearanceDefaultVersion !==
+            DEFAULT_SETTINGS.appearanceDefaultVersion &&
+          parsedSettings.appearance === "system";
+
+        const nextSettings: DashboardSettings = {
           ...DEFAULT_SETTINGS,
           ...parsedSettings,
+          appearance: shouldUseNewLightDefault
+            ? "light"
+            : parsedSettings.appearance || DEFAULT_SETTINGS.appearance,
+          appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
           columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
-        });
+        };
+
+        setSettings(nextSettings);
+        window.localStorage.setItem(
+          SETTINGS_STORAGE_KEY,
+          JSON.stringify(nextSettings),
+        );
       }
     } catch {
       setSettings(DEFAULT_SETTINGS);
@@ -710,6 +727,62 @@ export default function SettingsPage() {
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
+                      Appearance
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Choose the preferred colour mode. Light Mode is the
+                      default. System follows the current Chrome or device
+                      appearance.
+                    </p>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <AppearanceOption
+                      value="light"
+                      title="Light Mode"
+                      description="Default white and blue interface"
+                      selected={settings.appearance === "light"}
+                      onSelect={(value) => {
+                        setSettings((current) => ({
+                          ...current,
+                          appearance: value,
+                        }));
+                        setSaved(false);
+                      }}
+                    />
+                    <AppearanceOption
+                      value="dark"
+                      title="Dark Mode"
+                      description="Black-blue interface with light text"
+                      selected={settings.appearance === "dark"}
+                      onSelect={(value) => {
+                        setSettings((current) => ({
+                          ...current,
+                          appearance: value,
+                        }));
+                        setSaved(false);
+                      }}
+                    />
+                    <AppearanceOption
+                      value="system"
+                      title="System"
+                      description="Follow Chrome or device"
+                      selected={settings.appearance === "system"}
+                      onSelect={(value) => {
+                        setSettings((current) => ({
+                          ...current,
+                          appearance: value,
+                        }));
+                        setSaved(false);
+                      }}
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
                       Job Information Sheet Column Order
                     </h3>
 
@@ -775,61 +848,6 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="border-b border-slate-100 pb-4">
-                    <h3 className="text-base font-semibold text-slate-900">
-                      Appearance
-                    </h3>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Choose the preferred colour mode. System follows the
-                      current Chrome or device appearance.
-                    </p>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                    <AppearanceOption
-                      value="system"
-                      title="System"
-                      description="Follow Chrome or device"
-                      selected={settings.appearance === "system"}
-                      onSelect={(value) => {
-                        setSettings((current) => ({
-                          ...current,
-                          appearance: value,
-                        }));
-                        setSaved(false);
-                      }}
-                    />
-                    <AppearanceOption
-                      value="light"
-                      title="Light Mode"
-                      description="Always use light mode"
-                      selected={settings.appearance === "light"}
-                      onSelect={(value) => {
-                        setSettings((current) => ({
-                          ...current,
-                          appearance: value,
-                        }));
-                        setSaved(false);
-                      }}
-                    />
-                    <AppearanceOption
-                      value="dark"
-                      title="Dark Mode"
-                      description="Always use dark mode"
-                      selected={settings.appearance === "dark"}
-                      onSelect={(value) => {
-                        setSettings((current) => ({
-                          ...current,
-                          appearance: value,
-                        }));
-                        setSaved(false);
-                      }}
-                    />
                   </div>
                 </section>
 
