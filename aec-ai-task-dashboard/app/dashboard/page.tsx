@@ -7,9 +7,8 @@ import { createClient } from "@supabase/supabase-js";
 /* =========================================================
    Job Types
 
-   This Dashboard is read-only, so the shared EditJobModal
-   dependency is intentionally removed. Keeping the types here
-   prevents module-resolution and implicit-any TypeScript errors.
+   Jobs can be opened and edited from the Job Calendar and
+   Job Progress Board. Changes are saved directly to Supabase.
 ========================================================= */
 
 const JOB_STATUSES = [
@@ -51,6 +50,15 @@ type Job = {
   invoiceNo: string;
   reportNo: string;
   collectionDateTime: string;
+
+  /*
+    Internal database metadata. These fields are never displayed.
+    They let the editor update the exact Supabase row even when the
+    visible Job ID is changed by the user.
+  */
+  _rowKeyColumn: string;
+  _rowKeyValue: unknown;
+  _sourceRow: Record<string, unknown>;
 };
 
 const JOB_COLUMN_KEYS = [
@@ -144,6 +152,65 @@ const supabase =
 
 type SupabaseRow = Record<string, unknown>;
 
+const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
+  jobId: ["job_id", "jobId", "Job ID", "id"],
+  jobInDateTime: ["job_in_datetime", "jobInDateTime", "Job In Date & Time"],
+  salesPerson: ["sales_person", "salesPerson", "Sales Person"],
+  salesPersonPhone: [
+    "sales_person_phone",
+    "salesPersonPhone",
+    "Sales Person Phone",
+  ],
+  customerStatus: ["customer_status", "customerStatus", "Customer Status"],
+  customerName: ["customer_name", "customerName", "Customer Name"],
+  customerPhone: ["customer_phone", "customerPhone", "Customer Phone"],
+  customerCompanyName: [
+    "customer_company_name",
+    "customerCompanyName",
+    "Customer Company Name",
+  ],
+  assignedTechnician: [
+    "assigned_technician",
+    "assignedTechnician",
+    "Assigned Technician",
+  ],
+  technicianPhone: ["technician_phone", "technicianPhone", "Technician Phone"],
+  description: ["description_item", "description", "Description / Item"],
+  status: ["status", "Status"],
+  inProgressStartDateTime: [
+    "in_progress_start_datetime",
+    "inProgressStartDateTime",
+    "In Progress Start Date & Time",
+  ],
+  inProgressEndDateTime: [
+    "in_progress_end_datetime",
+    "inProgressEndDateTime",
+    "In Progress End Date & Time",
+  ],
+  statusRemark: [
+    "status_remark_issue",
+    "status_remark",
+    "statusRemark",
+    "Status Remark / Issue",
+  ],
+  jobCompleteDateTime: [
+    "job_complete_datetime",
+    "jobCompleteDateTime",
+    "Job Complete Date & Time",
+  ],
+  invoiceNo: ["invoice_no", "invoiceNo", "Invoice No."],
+  reportNo: ["report_no", "reportNo", "Report No."],
+  collectionDateTime: [
+    "collection_datetime",
+    "collectionDateTime",
+    "Collection Date & Time",
+  ],
+};
+
+function findExistingColumn(row: SupabaseRow, aliases: string[]) {
+  return aliases.find((key) => Object.prototype.hasOwnProperty.call(row, key));
+}
+
 function readText(row: SupabaseRow, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -180,20 +247,15 @@ function normalizeJobStatus(value: string): JobStatus {
 }
 
 function mapJobRow(row: SupabaseRow): Job {
+  const rowKeyColumn =
+    findExistingColumn(row, ["id", "job_id", "jobId", "Job ID"]) || "job_id";
+
   return {
     jobId: readText(row, ["job_id", "jobId", "Job ID", "id"]),
     jobInDateTime: normalizeDateTime(
-      readText(row, [
-        "job_in_datetime",
-        "jobInDateTime",
-        "Job In Date & Time",
-      ]),
+      readText(row, ["job_in_datetime", "jobInDateTime", "Job In Date & Time"]),
     ),
-    salesPerson: readText(row, [
-      "sales_person",
-      "salesPerson",
-      "Sales Person",
-    ]),
+    salesPerson: readText(row, ["sales_person", "salesPerson", "Sales Person"]),
     salesPersonPhone: readText(row, [
       "sales_person_phone",
       "salesPersonPhone",
@@ -271,7 +333,51 @@ function mapJobRow(row: SupabaseRow): Job {
         "Collection Date & Time",
       ]),
     ),
+    _rowKeyColumn: rowKeyColumn,
+    _rowKeyValue: row[rowKeyColumn],
+    _sourceRow: row,
   };
+}
+
+function buildJobUpdatePayload(originalJob: Job, editedJob: Job) {
+  return JOB_COLUMN_KEYS.reduce<Record<string, string | null>>(
+    (payload, key) => {
+      const sourceColumn =
+        findExistingColumn(originalJob._sourceRow, JOB_FIELD_ALIASES[key]) ||
+        JOB_FIELD_ALIASES[key][0];
+
+      const rawValue = String(editedJob[key] ?? "");
+      const isDateTimeField =
+        key === "jobInDateTime" ||
+        key === "inProgressStartDateTime" ||
+        key === "inProgressEndDateTime" ||
+        key === "jobCompleteDateTime" ||
+        key === "collectionDateTime";
+
+      payload[sourceColumn] = isDateTimeField
+        ? rawValue
+          ? rawValue.replace("T", " ")
+          : null
+        : rawValue;
+
+      return payload;
+    },
+    {},
+  );
+}
+
+function toDateTimeLocalValue(value: string) {
+  if (!value) return "";
+  return value.replace(" ", "T").slice(0, 16);
+}
+
+function getCurrentLocalDateTime() {
+  const now = new Date();
+  const offsetMilliseconds = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMilliseconds)
+    .toISOString()
+    .slice(0, 16)
+    .replace("T", " ");
 }
 
 /* =========================================================
@@ -463,7 +569,7 @@ function StatusIcon({
 }
 
 /* =========================================================
-   Read-only Job Table Sheet
+   Job Information Sheet
 ========================================================= */
 
 function JobDataTable({
@@ -1009,9 +1115,24 @@ export default function DashboardPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [dataIsLoading, setDataIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [editedJob, setEditedJob] = useState<Job | null>(null);
+  const [jobSaveIsLoading, setJobSaveIsLoading] = useState(false);
+  const [jobSaveError, setJobSaveError] = useState("");
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!editedJob) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [editedJob]);
 
   useEffect(() => {
     function loadSettings() {
@@ -1250,6 +1371,103 @@ export default function DashboardPage() {
     setCalendarDate(new Date());
   }
 
+  function openJobEditor(job: Job) {
+    setSelectedJob(job);
+    setEditedJob({ ...job, _sourceRow: { ...job._sourceRow } });
+    setJobSaveError("");
+  }
+
+  function closeJobEditor() {
+    if (jobSaveIsLoading) return;
+    setSelectedJob(null);
+    setEditedJob(null);
+    setJobSaveError("");
+  }
+
+  function updateEditedJob(key: JobColumnKey, value: string) {
+    setEditedJob((currentJob) => {
+      if (!currentJob) return currentJob;
+
+      const nextJob = {
+        ...currentJob,
+        [key]: key === "status" ? normalizeJobStatus(value) : value,
+      } as Job;
+
+      if (
+        key === "status" &&
+        value === "Complete" &&
+        settings.autoCompleteDate &&
+        !nextJob.jobCompleteDateTime
+      ) {
+        nextJob.jobCompleteDateTime = getCurrentLocalDateTime();
+      }
+
+      return nextJob;
+    });
+  }
+
+  async function saveEditedJob() {
+    if (!selectedJob || !editedJob) return;
+
+    if (!supabase) {
+      setJobSaveError(
+        "Supabase is not connected. Check the project Environment Variables.",
+      );
+      return;
+    }
+
+    if (
+      !selectedJob._rowKeyColumn ||
+      selectedJob._rowKeyValue === null ||
+      selectedJob._rowKeyValue === undefined ||
+      selectedJob._rowKeyValue === ""
+    ) {
+      setJobSaveError(
+        "This job does not have a usable Supabase row ID or Job ID.",
+      );
+      return;
+    }
+
+    setJobSaveIsLoading(true);
+    setJobSaveError("");
+
+    const payload = buildJobUpdatePayload(selectedJob, editedJob);
+    const { data, error } = await supabase
+      .from(JOBS_TABLE)
+      .update(payload)
+      .eq(selectedJob._rowKeyColumn, selectedJob._rowKeyValue)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      setJobSaveError(`Unable to save this job: ${error.message}`);
+      setJobSaveIsLoading(false);
+      return;
+    }
+
+    if (!data) {
+      setJobSaveError(
+        "No row was updated. Please allow UPDATE access for the aec-dashboard table in Supabase RLS policies.",
+      );
+      setJobSaveIsLoading(false);
+      return;
+    }
+
+    const savedJob = mapJobRow(data as SupabaseRow);
+
+    setJobs((currentJobs) =>
+      currentJobs.map((job) =>
+        job._rowKeyColumn === selectedJob._rowKeyColumn &&
+        job._rowKeyValue === selectedJob._rowKeyValue
+          ? savedJob
+          : job,
+      ),
+    );
+    setSelectedJob(null);
+    setEditedJob(null);
+    setJobSaveIsLoading(false);
+  }
+
   return (
     <main
       className={`min-h-screen bg-slate-50 ${
@@ -1336,11 +1554,7 @@ export default function DashboardPage() {
                   card.status === "New Job" || card.status === "Complete",
               )
               .map((card) => (
-                <StatisticCard
-                  key={card.status}
-                  {...card}
-                  darkModeIsActive={darkModeIsActive}
-                />
+                <StatisticCard key={card.status} {...card} />
               ))}
           </div>
 
@@ -1351,11 +1565,7 @@ export default function DashboardPage() {
                   card.status !== "New Job" && card.status !== "Complete",
               )
               .map((card) => (
-                <StatisticCard
-                  key={card.status}
-                  {...card}
-                  darkModeIsActive={darkModeIsActive}
-                />
+                <StatisticCard key={card.status} {...card} />
               ))}
           </div>
         </section>
@@ -1480,15 +1690,17 @@ export default function DashboardPage() {
 
                       <div className="space-y-1.5">
                         {dayJobs.slice(0, 4).map((job) => (
-                          <div
+                          <button
+                            type="button"
                             key={`${job.jobId}-${calendarDay.dateKey}`}
+                            onClick={() => openJobEditor(job)}
                             title={`${job.jobId} - ${job.customerName} - ${
                               job.description
                             } | ${formatInProgressPeriod(
                               job.inProgressStartDateTime,
                               job.inProgressEndDateTime,
                             )}`}
-                            className={`block w-full rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold ${statusStyles[job.status].calendar}`}
+                            className={`block w-full rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
                           >
                             <span className="flex min-w-0 items-center gap-1.5">
                               <span
@@ -1508,7 +1720,7 @@ export default function DashboardPage() {
                               {job.customerName}
                               {job.description ? ` - ${job.description}` : ""}
                             </span>
-                          </div>
+                          </button>
                         ))}
 
                         {dayJobs.length > 4 && (
@@ -1525,7 +1737,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Read-only Job Table Sheet */}
+        {/* Job Information Sheet */}
 
         <JobDataTable jobs={jobs} columnOrder={settings.columnOrder} />
 
@@ -1651,9 +1863,11 @@ export default function DashboardPage() {
                     {statusJobs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                         {statusJobs.map((job) => (
-                          <div
+                          <button
+                            type="button"
                             key={job.jobId}
-                            className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm"
+                            onClick={() => openJobEditor(job)}
+                            className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="truncate text-xs font-semibold text-blue-600">
@@ -1739,7 +1953,7 @@ export default function DashboardPage() {
                               </div>
                             </div>
 
-                            {/* Read-only Status */}
+                            {/* Current Status Display */}
 
                             <div className="mt-4 border-t border-slate-100 pt-3">
                               <p className="mb-1.5 text-[11px] font-medium text-slate-500">
@@ -1756,7 +1970,7 @@ export default function DashboardPage() {
                                 {displayLabels[job.status]}
                               </div>
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     ) : (
@@ -1773,7 +1987,297 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
+
+      {editedJob && (
+        <EditJobModal
+          job={editedJob}
+          staff={staff}
+          isSaving={jobSaveIsLoading}
+          saveError={jobSaveError}
+          onChange={updateEditedJob}
+          onClose={closeJobEditor}
+          onSave={saveEditedJob}
+        />
+      )}
     </main>
+  );
+}
+
+/* =========================================================
+   Editable Job Modal
+========================================================= */
+
+const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
+  "jobId",
+  "jobInDateTime",
+  "salesPerson",
+  "salesPersonPhone",
+  "customerStatus",
+  "customerName",
+  "customerPhone",
+  "customerCompanyName",
+];
+
+const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
+  "assignedTechnician",
+  "technicianPhone",
+  "description",
+  "status",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "statusRemark",
+  "jobCompleteDateTime",
+  "invoiceNo",
+  "reportNo",
+  "collectionDateTime",
+];
+
+const DATE_TIME_FIELDS = new Set<JobColumnKey>([
+  "jobInDateTime",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "jobCompleteDateTime",
+  "collectionDateTime",
+]);
+
+function EditJobModal({
+  job,
+  staff,
+  isSaving,
+  saveError,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  job: Job;
+  staff: Staff[];
+  isSaving: boolean;
+  saveError: string;
+  onChange: (key: JobColumnKey, value: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape" && !isSaving) {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [isSaving, onClose]);
+
+  function renderField(key: JobColumnKey) {
+    const fieldValue = String(job[key] ?? "");
+    const fieldClassName =
+      "mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
+
+    if (key === "status") {
+      return (
+        <select
+          id={`edit-${key}`}
+          value={job.status}
+          onChange={(event) => onChange(key, event.target.value)}
+          className={fieldClassName}
+        >
+          {JOB_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {displayLabels[status]}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (key === "customerStatus") {
+      const knownOptions = ["New Customer", "Existing Customer"];
+      const hasCustomValue =
+        Boolean(fieldValue) && !knownOptions.includes(fieldValue);
+
+      return (
+        <select
+          id={`edit-${key}`}
+          value={fieldValue}
+          onChange={(event) => onChange(key, event.target.value)}
+          className={fieldClassName}
+        >
+          <option value="">Select customer status</option>
+          {hasCustomValue && <option value={fieldValue}>{fieldValue}</option>}
+          {knownOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (key === "description" || key === "statusRemark") {
+      return (
+        <textarea
+          id={`edit-${key}`}
+          value={fieldValue}
+          onChange={(event) => onChange(key, event.target.value)}
+          rows={key === "description" ? 4 : 3}
+          className={`${fieldClassName} resize-y`}
+        />
+      );
+    }
+
+    if (DATE_TIME_FIELDS.has(key)) {
+      return (
+        <input
+          id={`edit-${key}`}
+          type="datetime-local"
+          value={toDateTimeLocalValue(fieldValue)}
+          onChange={(event) => onChange(key, event.target.value)}
+          className={fieldClassName}
+        />
+      );
+    }
+
+    return (
+      <>
+        <input
+          id={`edit-${key}`}
+          type="text"
+          value={fieldValue}
+          list={key === "assignedTechnician" ? "aec-staff-options" : undefined}
+          onChange={(event) => onChange(key, event.target.value)}
+          className={fieldClassName}
+        />
+
+        {key === "assignedTechnician" && (
+          <datalist id="aec-staff-options">
+            {staff.map((staffMember) => (
+              <option key={staffMember.id} value={staffMember.name}>
+                {staffMember.position}
+              </option>
+            ))}
+          </datalist>
+        )}
+      </>
+    );
+  }
+
+  function renderSection(
+    title: string,
+    description: string,
+    fields: JobColumnKey[],
+  ) {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-slate-50/40 p-5">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
+          {fields.map((key) => (
+            <div
+              key={key}
+              className={
+                key === "description" || key === "statusRemark"
+                  ? "md:col-span-2"
+                  : ""
+              }
+            >
+              <label
+                htmlFor={`edit-${key}`}
+                className="text-xs font-semibold text-slate-700"
+              >
+                {JOB_COLUMN_LABELS[key]}
+              </label>
+              {renderField(key)}
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-job-title"
+        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+              Edit Job
+            </p>
+            <h2
+              id="edit-job-title"
+              className="mt-1 truncate text-xl font-semibold text-slate-950"
+            >
+              {job.jobId || "Job Information"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              All fields below can be edited and saved to Supabase.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            aria-label="Close Edit Job"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl leading-none text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-5 overflow-y-auto px-5 py-5 sm:px-7">
+          {renderSection(
+            "Job Information",
+            "Customer, sales and incoming job information.",
+            JOB_INFORMATION_FIELDS,
+          )}
+
+          {renderSection(
+            "Job Progress Details",
+            "Technician, workflow status, dates and supporting references.",
+            JOB_PROGRESS_FIELDS,
+          )}
+
+          {saveError && (
+            <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium leading-6 text-rose-700">
+              {saveError}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="h-11 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="h-11 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2002,24 +2506,14 @@ function StatisticCard({
   label,
   value,
   hex,
-  darkModeIsActive,
 }: {
   status: JobStatus;
   label: string;
   value: number;
   hex: string;
-  darkModeIsActive: boolean;
 }) {
-  const lowerPanelColor = darkModeIsActive ? "#0d1b2e" : "#ffffff";
-
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-      style={{
-        borderColor: `${hex}55`,
-        background: `linear-gradient(180deg, ${hex}33 0%, ${hex}33 50%, ${lowerPanelColor} 50%, ${lowerPanelColor} 100%)`,
-      }}
-    >
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div
         className="absolute inset-y-0 left-0 w-1.5"
         style={{ backgroundColor: hex }}
