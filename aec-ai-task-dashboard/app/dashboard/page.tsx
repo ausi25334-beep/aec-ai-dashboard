@@ -339,47 +339,6 @@ function mapJobRow(row: SupabaseRow): Job {
   };
 }
 
-function buildJobUpdatePayload(originalJob: Job, editedJob: Job) {
-  return JOB_COLUMN_KEYS.reduce<Record<string, string | null>>(
-    (payload, key) => {
-      const sourceColumn =
-        findExistingColumn(originalJob._sourceRow, JOB_FIELD_ALIASES[key]) ||
-        JOB_FIELD_ALIASES[key][0];
-
-      const rawValue = String(editedJob[key] ?? "");
-      const isDateTimeField =
-        key === "jobInDateTime" ||
-        key === "inProgressStartDateTime" ||
-        key === "inProgressEndDateTime" ||
-        key === "jobCompleteDateTime" ||
-        key === "collectionDateTime";
-
-      payload[sourceColumn] = isDateTimeField
-        ? rawValue
-          ? rawValue.replace("T", " ")
-          : null
-        : rawValue;
-
-      return payload;
-    },
-    {},
-  );
-}
-
-function toDateTimeLocalValue(value: string) {
-  if (!value) return "";
-  return value.replace(" ", "T").slice(0, 16);
-}
-
-function getCurrentLocalDateTime() {
-  const now = new Date();
-  const offsetMilliseconds = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offsetMilliseconds)
-    .toISOString()
-    .slice(0, 16)
-    .replace("T", " ");
-}
-
 /* =========================================================
    Settings
 ========================================================= */
@@ -1116,15 +1075,12 @@ export default function DashboardPage() {
   const [dataIsLoading, setDataIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [editedJob, setEditedJob] = useState<Job | null>(null);
-  const [jobSaveIsLoading, setJobSaveIsLoading] = useState(false);
-  const [jobSaveError, setJobSaveError] = useState("");
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
   useEffect(() => {
-    if (!editedJob) return;
+    if (!selectedJob) return;
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -1132,7 +1088,7 @@ export default function DashboardPage() {
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, [editedJob]);
+  }, [selectedJob]);
 
   useEffect(() => {
     function loadSettings() {
@@ -1371,101 +1327,12 @@ export default function DashboardPage() {
     setCalendarDate(new Date());
   }
 
-  function openJobEditor(job: Job) {
+  function openJobDetails(job: Job) {
     setSelectedJob(job);
-    setEditedJob({ ...job, _sourceRow: { ...job._sourceRow } });
-    setJobSaveError("");
   }
 
-  function closeJobEditor() {
-    if (jobSaveIsLoading) return;
+  function closeJobDetails() {
     setSelectedJob(null);
-    setEditedJob(null);
-    setJobSaveError("");
-  }
-
-  function updateEditedJob(key: JobColumnKey, value: string) {
-    setEditedJob((currentJob) => {
-      if (!currentJob) return currentJob;
-
-      const nextJob = {
-        ...currentJob,
-        [key]: key === "status" ? normalizeJobStatus(value) : value,
-      } as Job;
-
-      if (
-        key === "status" &&
-        value === "Complete" &&
-        settings.autoCompleteDate &&
-        !nextJob.jobCompleteDateTime
-      ) {
-        nextJob.jobCompleteDateTime = getCurrentLocalDateTime();
-      }
-
-      return nextJob;
-    });
-  }
-
-  async function saveEditedJob() {
-    if (!selectedJob || !editedJob) return;
-
-    if (!supabase) {
-      setJobSaveError(
-        "Supabase is not connected. Check the project Environment Variables.",
-      );
-      return;
-    }
-
-    if (
-      !selectedJob._rowKeyColumn ||
-      selectedJob._rowKeyValue === null ||
-      selectedJob._rowKeyValue === undefined ||
-      selectedJob._rowKeyValue === ""
-    ) {
-      setJobSaveError(
-        "This job does not have a usable Supabase row ID or Job ID.",
-      );
-      return;
-    }
-
-    setJobSaveIsLoading(true);
-    setJobSaveError("");
-
-    const payload = buildJobUpdatePayload(selectedJob, editedJob);
-    const { data, error } = await supabase
-      .from(JOBS_TABLE)
-      .update(payload)
-      .eq(selectedJob._rowKeyColumn, selectedJob._rowKeyValue)
-      .select("*")
-      .maybeSingle();
-
-    if (error) {
-      setJobSaveError(`Unable to save this job: ${error.message}`);
-      setJobSaveIsLoading(false);
-      return;
-    }
-
-    if (!data) {
-      setJobSaveError(
-        "No row was updated. Please allow UPDATE access for the aec-dashboard table in Supabase RLS policies.",
-      );
-      setJobSaveIsLoading(false);
-      return;
-    }
-
-    const savedJob = mapJobRow(data as SupabaseRow);
-
-    setJobs((currentJobs) =>
-      currentJobs.map((job) =>
-        job._rowKeyColumn === selectedJob._rowKeyColumn &&
-        job._rowKeyValue === selectedJob._rowKeyValue
-          ? savedJob
-          : job,
-      ),
-    );
-    setSelectedJob(null);
-    setEditedJob(null);
-    setJobSaveIsLoading(false);
   }
 
   return (
@@ -1693,7 +1560,7 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             key={`${job.jobId}-${calendarDay.dateKey}`}
-                            onClick={() => openJobEditor(job)}
+                            onClick={() => openJobDetails(job)}
                             title={`${job.jobId} - ${job.customerName} - ${
                               job.description
                             } | ${formatInProgressPeriod(
@@ -1866,7 +1733,7 @@ export default function DashboardPage() {
                           <button
                             type="button"
                             key={job.jobId}
-                            onClick={() => openJobEditor(job)}
+                            onClick={() => openJobDetails(job)}
                             className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10"
                           >
                             <div className="flex items-start justify-between gap-2">
@@ -1988,15 +1855,10 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      {editedJob && (
-        <EditJobModal
-          job={editedJob}
-          staff={staff}
-          isSaving={jobSaveIsLoading}
-          saveError={jobSaveError}
-          onChange={updateEditedJob}
-          onClose={closeJobEditor}
-          onSave={saveEditedJob}
+      {selectedJob && (
+        <ReadOnlyJobModal
+          job={selectedJob}
+          onClose={closeJobDetails}
         />
       )}
     </main>
@@ -2004,7 +1866,7 @@ export default function DashboardPage() {
 }
 
 /* =========================================================
-   Editable Job Modal
+   Read-only Job Details Modal
 ========================================================= */
 
 const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
@@ -2040,124 +1902,43 @@ const DATE_TIME_FIELDS = new Set<JobColumnKey>([
   "collectionDateTime",
 ]);
 
-function EditJobModal({
+function ReadOnlyJobModal({
   job,
-  staff,
-  isSaving,
-  saveError,
-  onChange,
   onClose,
-  onSave,
 }: {
   job: Job;
-  staff: Staff[];
-  isSaving: boolean;
-  saveError: string;
-  onChange: (key: JobColumnKey, value: string) => void;
   onClose: () => void;
-  onSave: () => void;
 }) {
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSaving) {
+      if (event.key === "Escape") {
         onClose();
       }
     }
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [isSaving, onClose]);
+  }, [onClose]);
 
   function renderField(key: JobColumnKey) {
     const fieldValue = String(job[key] ?? "");
-    const fieldClassName =
-      "mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
-
-    if (key === "status") {
-      return (
-        <select
-          id={`edit-${key}`}
-          value={job.status}
-          onChange={(event) => onChange(key, event.target.value)}
-          className={fieldClassName}
-        >
-          {JOB_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {displayLabels[status]}
-            </option>
-          ))}
-        </select>
-      );
-    }
-
-    if (key === "customerStatus") {
-      const knownOptions = ["New Customer", "Existing Customer"];
-      const hasCustomValue =
-        Boolean(fieldValue) && !knownOptions.includes(fieldValue);
-
-      return (
-        <select
-          id={`edit-${key}`}
-          value={fieldValue}
-          onChange={(event) => onChange(key, event.target.value)}
-          className={fieldClassName}
-        >
-          <option value="">Select customer status</option>
-          {hasCustomValue && <option value={fieldValue}>{fieldValue}</option>}
-          {knownOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      );
-    }
-
-    if (key === "description" || key === "statusRemark") {
-      return (
-        <textarea
-          id={`edit-${key}`}
-          value={fieldValue}
-          onChange={(event) => onChange(key, event.target.value)}
-          rows={key === "description" ? 4 : 3}
-          className={`${fieldClassName} resize-y`}
-        />
-      );
-    }
-
-    if (DATE_TIME_FIELDS.has(key)) {
-      return (
-        <input
-          id={`edit-${key}`}
-          type="datetime-local"
-          value={toDateTimeLocalValue(fieldValue)}
-          onChange={(event) => onChange(key, event.target.value)}
-          className={fieldClassName}
-        />
-      );
-    }
+    const displayValue =
+      key === "status"
+        ? displayLabels[job.status]
+        : DATE_TIME_FIELDS.has(key)
+          ? formatDisplayDateTime(fieldValue)
+          : fieldValue || "—";
 
     return (
-      <>
-        <input
-          id={`edit-${key}`}
-          type="text"
-          value={fieldValue}
-          list={key === "assignedTechnician" ? "aec-staff-options" : undefined}
-          onChange={(event) => onChange(key, event.target.value)}
-          className={fieldClassName}
-        />
-
-        {key === "assignedTechnician" && (
-          <datalist id="aec-staff-options">
-            {staff.map((staffMember) => (
-              <option key={staffMember.id} value={staffMember.name}>
-                {staffMember.position}
-              </option>
-            ))}
-          </datalist>
-        )}
-      </>
+      <div
+        className={`mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-slate-900 ${
+          key === "description" || key === "statusRemark"
+            ? "whitespace-pre-wrap"
+            : "break-words"
+        }`}
+      >
+        {displayValue}
+      </div>
     );
   }
 
@@ -2183,12 +1964,9 @@ function EditJobModal({
                   : ""
               }
             >
-              <label
-                htmlFor={`edit-${key}`}
-                className="text-xs font-semibold text-slate-700"
-              >
+              <p className="text-xs font-semibold text-slate-700">
                 {JOB_COLUMN_LABELS[key]}
-              </label>
+              </p>
               {renderField(key)}
             </div>
           ))}
@@ -2207,31 +1985,30 @@ function EditJobModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="edit-job-title"
+        aria-labelledby="job-details-title"
         className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-              Edit Job
+              Job Details
             </p>
             <h2
-              id="edit-job-title"
+              id="job-details-title"
               className="mt-1 truncate text-xl font-semibold text-slate-950"
             >
               {job.jobId || "Job Information"}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              All fields below can be edited and saved to Supabase.
+              Read-only job information.
             </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            disabled={isSaving}
-            aria-label="Close Edit Job"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl leading-none text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Close Job Details"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-xl leading-none text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
           >
             ×
           </button>
@@ -2250,30 +2027,15 @@ function EditJobModal({
             JOB_PROGRESS_FIELDS,
           )}
 
-          {saveError && (
-            <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-medium leading-6 text-rose-700">
-              {saveError}
-            </div>
-          )}
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+        <div className="flex justify-end border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
           <button
             type="button"
             onClick={onClose}
-            disabled={isSaving}
-            className="h-11 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-11 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20"
           >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={isSaving}
-            className="h-11 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSaving ? "Saving..." : "Save Changes"}
+            Close
           </button>
         </div>
       </div>
