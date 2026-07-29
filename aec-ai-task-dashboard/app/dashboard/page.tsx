@@ -226,7 +226,20 @@ function readText(row: SupabaseRow, keys: string[]) {
 function normalizeDateTime(value: string) {
   if (!value.trim()) return "";
 
-  return value.trim().replace("T", " ").slice(0, 16);
+  /*
+    Keep the complete Supabase value.
+
+    Some date columns contain an ISO value such as:
+      2026-05-25T16:35:00
+
+    Other existing rows contain a display value such as:
+      25 May 2026, 04:35 PM
+
+    The previous `.slice(0, 16)` truncated the second format to
+    `25 May 2026, 04:` and permanently removed its minutes and AM/PM
+    from the Dashboard state.
+  */
+  return value.trim();
 }
 
 function normalizeJobStatus(value: string): JobStatus {
@@ -889,20 +902,211 @@ function formatDateKey(date: Date) {
 
 function getJobDateKey(jobDateTime?: string) {
   if (!jobDateTime) return "";
-  return jobDateTime.trim().slice(0, 10);
+
+  const parts = parseDateTimeParts(jobDateTime);
+
+  if (!parts) return "";
+
+  return [
+    String(parts.year).padStart(4, "0"),
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0"),
+  ].join("-");
+}
+
+type DateTimeParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour?: number;
+  minute?: number;
+};
+
+const MONTH_NUMBER_BY_NAME: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function convertTo24Hour(hour: number, meridiem?: string) {
+  const normalizedMeridiem = meridiem?.toUpperCase();
+
+  if (normalizedMeridiem === "AM") {
+    return hour === 12 ? 0 : hour;
+  }
+
+  if (normalizedMeridiem === "PM") {
+    return hour === 12 ? 12 : hour + 12;
+  }
+
+  return hour;
+}
+
+function isValidDateTimeParts(parts: DateTimeParts) {
+  const hour = parts.hour ?? 0;
+  const minute = parts.minute ?? 0;
+
+  if (
+    parts.month < 1 ||
+    parts.month > 12 ||
+    parts.day < 1 ||
+    parts.day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return false;
+  }
+
+  const testDate = new Date(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    hour,
+    minute,
+  );
+
+  return (
+    testDate.getFullYear() === parts.year &&
+    testDate.getMonth() === parts.month - 1 &&
+    testDate.getDate() === parts.day
+  );
+}
+
+function parseDateTimeParts(value?: string): DateTimeParts | null {
+  if (!value?.trim()) return null;
+
+  const normalizedValue = value.trim().replace(/\s+/g, " ");
+
+  /*
+    Supabase ISO / SQL formats:
+      2026-05-25T16:35:00
+      2026-05-25 16:35:00+00
+      2026-05-25 04:35 PM
+  */
+  const isoMatch = normalizedValue.match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*(AM|PM)?)?/i,
+  );
+
+  if (isoMatch) {
+    const parts: DateTimeParts = {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+      hour:
+        isoMatch[4] === undefined
+          ? undefined
+          : convertTo24Hour(Number(isoMatch[4]), isoMatch[6]),
+      minute: isoMatch[5] === undefined ? undefined : Number(isoMatch[5]),
+    };
+
+    return isValidDateTimeParts(parts) ? parts : null;
+  }
+
+  /*
+    Numeric day-first formats:
+      25/05/2026 04:35 PM
+      25-05-2026, 16:35
+  */
+  const numericDayFirstMatch = normalizedValue.match(
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?)?/i,
+  );
+
+  if (numericDayFirstMatch) {
+    const parts: DateTimeParts = {
+      year: Number(numericDayFirstMatch[3]),
+      month: Number(numericDayFirstMatch[2]),
+      day: Number(numericDayFirstMatch[1]),
+      hour:
+        numericDayFirstMatch[4] === undefined
+          ? undefined
+          : convertTo24Hour(
+              Number(numericDayFirstMatch[4]),
+              numericDayFirstMatch[6],
+            ),
+      minute:
+        numericDayFirstMatch[5] === undefined
+          ? undefined
+          : Number(numericDayFirstMatch[5]),
+    };
+
+    return isValidDateTimeParts(parts) ? parts : null;
+  }
+
+  /*
+    Existing human-readable values:
+      25 May 2026, 04:35 PM
+      25 May 2026 16:35
+  */
+  const namedMonthMatch = normalizedValue.match(
+    /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?)?/i,
+  );
+
+  if (namedMonthMatch) {
+    const month =
+      MONTH_NUMBER_BY_NAME[namedMonthMatch[2].trim().toLowerCase()];
+
+    if (!month) return null;
+
+    const parts: DateTimeParts = {
+      year: Number(namedMonthMatch[3]),
+      month,
+      day: Number(namedMonthMatch[1]),
+      hour:
+        namedMonthMatch[4] === undefined
+          ? undefined
+          : convertTo24Hour(
+              Number(namedMonthMatch[4]),
+              namedMonthMatch[6],
+            ),
+      minute:
+        namedMonthMatch[5] === undefined
+          ? undefined
+          : Number(namedMonthMatch[5]),
+    };
+
+    return isValidDateTimeParts(parts) ? parts : null;
+  }
+
+  return null;
 }
 
 function parseDateTime(value?: string) {
-  if (!value?.trim()) return null;
+  const parts = parseDateTimeParts(value);
 
-  const normalizedValue = value.trim().replace("T", " ");
-  const [datePart, timePart = "00:00"] = normalizedValue.split(" ");
-  const [year, month, day] = datePart.split("-").map(Number);
-  const [hour = 0, minute = 0] = timePart.split(":").map(Number);
+  if (!parts) return null;
 
-  if (!year || !month || !day) return null;
-
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  const date = new Date(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour ?? 0,
+    parts.minute ?? 0,
+    0,
+    0,
+  );
 
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -928,21 +1132,29 @@ function isJobScheduledOnDate(job: Job, dateKey: string) {
 function formatDisplayDateTime(value?: string) {
   if (!value?.trim()) return "-";
 
-  const normalizedValue = value.trim().replace("T", " ");
-  const [datePart, timePart = ""] = normalizedValue.split(" ");
-  const [year, month, day] = datePart.split("-").map(Number);
+  const parts = parseDateTimeParts(value);
 
-  if (!year || !month || !day) {
-    return normalizedValue;
+  if (!parts) {
+    return value.trim();
   }
 
   const formattedDate = new Intl.DateTimeFormat("en-MY", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(year, month - 1, day));
+  }).format(new Date(parts.year, parts.month - 1, parts.day));
 
-  return timePart ? `${formattedDate}, ${timePart.slice(0, 5)}` : formattedDate;
+  if (parts.hour === undefined || parts.minute === undefined) {
+    return formattedDate;
+  }
+
+  const meridiem = parts.hour >= 12 ? "PM" : "AM";
+  const displayHour = parts.hour % 12 || 12;
+  const formattedTime = `${String(displayHour).padStart(2, "0")}:${String(
+    parts.minute,
+  ).padStart(2, "0")} ${meridiem}`;
+
+  return `${formattedDate}, ${formattedTime}`;
 }
 
 function formatInProgressPeriod(startDateTime?: string, endDateTime?: string) {
