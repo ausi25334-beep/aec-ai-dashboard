@@ -125,21 +125,14 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
 const USER_SETTINGS_STORAGE_PREFIX = "aec-dashboard-user-settings:";
 
-type PerAccountSettings = Pick<
+type PerAccountTheme = Pick<
   DashboardSettings,
-  | "operationsTeam"
-  | "appearance"
-  | "appearanceDefaultVersion"
-  | "language"
-  | "system"
+  "appearance" | "appearanceDefaultVersion"
 >;
 
-const DEFAULT_PER_ACCOUNT_SETTINGS: PerAccountSettings = {
-  operationsTeam: DEFAULT_SETTINGS.operationsTeam,
+const DEFAULT_PER_ACCOUNT_THEME: PerAccountTheme = {
   appearance: DEFAULT_SETTINGS.appearance,
   appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
-  language: DEFAULT_SETTINGS.language,
-  system: DEFAULT_SETTINGS.system,
 };
 
 function getUserSettingsStorageKey(name: string) {
@@ -148,36 +141,34 @@ function getUserSettingsStorageKey(name: string) {
   )}`;
 }
 
-function loadPerAccountSettings(name: string): PerAccountSettings {
+function loadPerAccountTheme(name: string): PerAccountTheme {
   try {
     const savedValue = window.localStorage.getItem(
       getUserSettingsStorageKey(name),
     );
 
-    if (!savedValue) return DEFAULT_PER_ACCOUNT_SETTINGS;
+    if (!savedValue) return DEFAULT_PER_ACCOUNT_THEME;
 
-    const parsedValue = JSON.parse(savedValue) as Partial<PerAccountSettings>;
+    const parsedValue = JSON.parse(savedValue) as Partial<PerAccountTheme>;
 
     return {
-      ...DEFAULT_PER_ACCOUNT_SETTINGS,
-      ...parsedValue,
       appearance:
         parsedValue.appearance === "dark" ||
         parsedValue.appearance === "system" ||
         parsedValue.appearance === "light"
           ? parsedValue.appearance
-          : DEFAULT_PER_ACCOUNT_SETTINGS.appearance,
+          : DEFAULT_PER_ACCOUNT_THEME.appearance,
       appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
     };
   } catch {
-    return DEFAULT_PER_ACCOUNT_SETTINGS;
+    return DEFAULT_PER_ACCOUNT_THEME;
   }
 }
 
-function savePerAccountSettings(
+function savePerAccountTheme(
   name: string,
-  preferences: PerAccountSettings,
+  preferences: PerAccountTheme,
 ) {
   window.localStorage.setItem(
     getUserSettingsStorageKey(name),
@@ -315,7 +306,7 @@ export default function SettingsPage() {
 
     try {
       const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-      const perAccountSettings = loadPerAccountSettings(currentUser.name);
+      const perAccountTheme = loadPerAccountTheme(currentUser.name);
 
       if (savedSettings) {
         const parsedSettings = JSON.parse(
@@ -325,7 +316,7 @@ export default function SettingsPage() {
         const nextSettings: DashboardSettings = {
           ...DEFAULT_SETTINGS,
           ...parsedSettings,
-          ...perAccountSettings,
+          ...perAccountTheme,
           columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
         };
 
@@ -333,13 +324,13 @@ export default function SettingsPage() {
       } else {
         setSettings({
           ...DEFAULT_SETTINGS,
-          ...perAccountSettings,
+          ...perAccountTheme,
         });
       }
     } catch {
       setSettings({
         ...DEFAULT_SETTINGS,
-        ...loadPerAccountSettings(currentUser.name),
+        ...loadPerAccountTheme(currentUser.name),
       });
     }
   }, [currentUser]);
@@ -409,20 +400,17 @@ export default function SettingsPage() {
 
     const sharedSettings: DashboardSettings = {
       ...normalizedSettings,
-      ...DEFAULT_PER_ACCOUNT_SETTINGS,
+      ...DEFAULT_PER_ACCOUNT_THEME,
     };
 
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify(sharedSettings),
     );
-    savePerAccountSettings(currentUser.name, {
-      operationsTeam: normalizedSettings.operationsTeam,
+    savePerAccountTheme(currentUser.name, {
       appearance: normalizedSettings.appearance,
       appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
-      language: normalizedSettings.language,
-      system: normalizedSettings.system,
+        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
     });
 
     setSettings(normalizedSettings);
@@ -497,19 +485,16 @@ export default function SettingsPage() {
     setSettings(nextSettings);
 
     if (currentUser) {
-      savePerAccountSettings(currentUser.name, {
-        operationsTeam: nextSettings.operationsTeam,
+      savePerAccountTheme(currentUser.name, {
         appearance: nextSettings.appearance,
         appearanceDefaultVersion:
-          DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
-        language: nextSettings.language,
-        system: nextSettings.system,
+          DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
       });
     }
 
     const sharedSettings: DashboardSettings = {
       ...nextSettings,
-      ...DEFAULT_PER_ACCOUNT_SETTINGS,
+      ...DEFAULT_PER_ACCOUNT_THEME,
     };
 
     window.localStorage.setItem(
@@ -605,7 +590,7 @@ export default function SettingsPage() {
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-5 lg:px-8">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
-              AEC Company
+              {settings.companyName}
             </p>
 
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
@@ -1114,15 +1099,13 @@ function EmployeeThemeSettings({
   const [saved, setSaved] = useState(false);
 
   function saveTheme() {
-    const currentPreferences = loadPerAccountSettings(currentUser.name);
-    const nextPreferences: PerAccountSettings = {
-      ...currentPreferences,
+    const nextPreferences: PerAccountTheme = {
       appearance: settings.appearance,
       appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
     };
 
-    savePerAccountSettings(currentUser.name, nextPreferences);
+    savePerAccountTheme(currentUser.name, nextPreferences);
     setSettings((current) => ({
       ...current,
       ...nextPreferences,
@@ -1143,7 +1126,7 @@ function EmployeeThemeSettings({
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 lg:px-8">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
-              AEC Company
+              {settings.companyName}
             </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
               Appearance Settings

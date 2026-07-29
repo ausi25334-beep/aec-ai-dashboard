@@ -399,21 +399,14 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
 const USER_SETTINGS_STORAGE_PREFIX = "aec-dashboard-user-settings:";
 
-type PerAccountSettings = Pick<
+type PerAccountTheme = Pick<
   DashboardSettings,
-  | "operationsTeam"
-  | "appearance"
-  | "appearanceDefaultVersion"
-  | "language"
-  | "system"
+  "appearance" | "appearanceDefaultVersion"
 >;
 
-const DEFAULT_PER_ACCOUNT_SETTINGS: PerAccountSettings = {
-  operationsTeam: DEFAULT_SETTINGS.operationsTeam,
+const DEFAULT_PER_ACCOUNT_THEME: PerAccountTheme = {
   appearance: DEFAULT_SETTINGS.appearance,
   appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
-  language: DEFAULT_SETTINGS.language,
-  system: DEFAULT_SETTINGS.system,
 };
 
 function getUserSettingsStorageKey(name: string) {
@@ -422,30 +415,28 @@ function getUserSettingsStorageKey(name: string) {
   )}`;
 }
 
-function loadPerAccountSettings(name: string): PerAccountSettings {
+function loadPerAccountTheme(name: string): PerAccountTheme {
   try {
     const storedValue = window.localStorage.getItem(
       getUserSettingsStorageKey(name),
     );
 
-    if (!storedValue) return DEFAULT_PER_ACCOUNT_SETTINGS;
+    if (!storedValue) return DEFAULT_PER_ACCOUNT_THEME;
 
-    const parsedValue = JSON.parse(storedValue) as Partial<PerAccountSettings>;
+    const parsedValue = JSON.parse(storedValue) as Partial<PerAccountTheme>;
 
     return {
-      ...DEFAULT_PER_ACCOUNT_SETTINGS,
-      ...parsedValue,
       appearance:
         parsedValue.appearance === "dark" ||
         parsedValue.appearance === "system" ||
         parsedValue.appearance === "light"
           ? parsedValue.appearance
-          : DEFAULT_PER_ACCOUNT_SETTINGS.appearance,
+          : DEFAULT_PER_ACCOUNT_THEME.appearance,
       appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_SETTINGS.appearanceDefaultVersion,
+        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
     };
   } catch {
-    return DEFAULT_PER_ACCOUNT_SETTINGS;
+    return DEFAULT_PER_ACCOUNT_THEME;
   }
 }
 
@@ -1338,6 +1329,7 @@ export default function DashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [currentUserName, setCurrentUserName] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [dataIsLoading, setDataIsLoading] = useState(true);
@@ -1404,8 +1396,7 @@ export default function DashboardPage() {
     function loadSettings() {
       try {
         const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        const perAccountSettings =
-          loadPerAccountSettings(currentUserName);
+        const perAccountTheme = loadPerAccountTheme(currentUserName);
 
         if (savedSettings) {
           const parsedSettings = JSON.parse(
@@ -1415,7 +1406,7 @@ export default function DashboardPage() {
           const nextSettings: DashboardSettings = {
             ...DEFAULT_SETTINGS,
             ...parsedSettings,
-            ...perAccountSettings,
+            ...perAccountTheme,
             columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
           };
 
@@ -1423,13 +1414,13 @@ export default function DashboardPage() {
         } else {
           setSettings({
             ...DEFAULT_SETTINGS,
-            ...perAccountSettings,
+            ...perAccountTheme,
           });
         }
       } catch {
         setSettings({
           ...DEFAULT_SETTINGS,
-          ...loadPerAccountSettings(currentUserName),
+          ...loadPerAccountTheme(currentUserName),
         });
       }
     }
@@ -1452,6 +1443,31 @@ export default function DashboardPage() {
       window.removeEventListener("aec-settings-updated", loadSettings);
     };
   }, [currentUserName]);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+
+    setSigningOut(true);
+
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Sign out request failed.");
+      }
+
+      router.replace("/login");
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setSigningOut(false);
+      window.alert("Sign out failed. Please try again.");
+    }
+  }
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1698,10 +1714,11 @@ export default function DashboardPage() {
 
             <button
               type="button"
-              onClick={() => router.push("/login")}
+              onClick={handleSignOut}
+              disabled={signingOut}
               className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
             >
-              Sign Out
+              {signingOut ? "Signing Out..." : "Sign Out"}
             </button>
           </div>
         </div>
