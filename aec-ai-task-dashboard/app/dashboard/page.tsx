@@ -262,6 +262,7 @@ type DashboardSettings = {
   dashboardTitle: string;
   administratorName: string;
   operationsTeam: string;
+  appearance: "system" | "light" | "dark";
   showStageLegend: boolean;
   showSummary: boolean;
   autoCompleteDate: boolean;
@@ -282,6 +283,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
   operationsTeam: "Operations Team",
+  appearance: "system",
   showStageLegend: true,
   showSummary: true,
   autoCompleteDate: true,
@@ -948,6 +950,7 @@ export default function DashboardPage() {
 
   const [jobs] = useState<Job[]>(initialJobs);
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
+  const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
 
   const [today] = useState(() => new Date());
@@ -991,6 +994,42 @@ export default function DashboardPage() {
       window.removeEventListener("aec-settings-updated", loadSettings);
     };
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const updateSystemMode = () => {
+      setSystemUsesDarkMode(mediaQuery.matches);
+    };
+
+    updateSystemMode();
+    mediaQuery.addEventListener("change", updateSystemMode);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateSystemMode);
+    };
+  }, []);
+
+  const darkModeIsActive =
+    settings.appearance === "dark" ||
+    (settings.appearance === "system" && systemUsesDarkMode);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      "aec-dark-root",
+      darkModeIsActive,
+    );
+    document.body.classList.toggle("aec-dark-body", darkModeIsActive);
+    document.documentElement.style.colorScheme = darkModeIsActive
+      ? "dark"
+      : "light";
+
+    return () => {
+      document.documentElement.classList.remove("aec-dark-root");
+      document.body.classList.remove("aec-dark-body");
+      document.documentElement.style.colorScheme = "";
+    };
+  }, [darkModeIsActive]);
 
   useEffect(() => {
     try {
@@ -1077,7 +1116,12 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main
+      className={`min-h-screen bg-slate-50 ${
+        darkModeIsActive ? "aec-dark" : ""
+      }`}
+    >
+      <DashboardThemeStyles />
       {/* Header */}
 
       <header className="border-b border-slate-200 bg-white">
@@ -1557,6 +1601,115 @@ export default function DashboardPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function DashboardThemeStyles() {
+  return (
+    <style>{`
+      .aec-dark-root,
+      .aec-dark-body {
+        background-color: #07111f !important;
+      }
+
+      .aec-dark {
+        background-color: #07111f !important;
+        color: #e5eefb;
+      }
+
+      .aec-dark [class~="bg-white"] {
+        background-color: #0d1b2e !important;
+      }
+
+      .aec-dark [class~="bg-slate-50"],
+      .aec-dark [class~="bg-slate-50/40"],
+      .aec-dark [class~="bg-slate-50/60"],
+      .aec-dark [class~="bg-slate-50/70"] {
+        background-color: #101f34 !important;
+      }
+
+      .aec-dark [class~="bg-slate-100"] {
+        background-color: #172941 !important;
+      }
+
+      .aec-dark [class~="bg-slate-200"] {
+        background-color: #243750 !important;
+      }
+
+      .aec-dark [class~="border-slate-100"],
+      .aec-dark [class~="border-slate-200"],
+      .aec-dark [class~="border-slate-300"] {
+        border-color: #2a3d57 !important;
+      }
+
+      .aec-dark [class~="text-slate-950"],
+      .aec-dark [class~="text-slate-900"],
+      .aec-dark [class~="text-slate-800"],
+      .aec-dark [class~="text-slate-700"] {
+        color: #f3f7fd !important;
+      }
+
+      .aec-dark [class~="text-slate-600"],
+      .aec-dark [class~="text-slate-500"] {
+        color: #a9b9ce !important;
+      }
+
+      .aec-dark [class~="text-slate-400"] {
+        color: #8395ad !important;
+      }
+
+      .aec-dark [class~="bg-blue-50"] {
+        background-color: #112d52 !important;
+      }
+
+      .aec-dark [class~="text-blue-700"] {
+        color: #7db4ff !important;
+      }
+
+      .aec-dark table thead [class~="bg-slate-50"] {
+        background-color: #13253d !important;
+      }
+
+      .aec-dark [class~="bg-emerald-50"] {
+        background-color: #073a32 !important;
+      }
+
+      .aec-dark [class~="text-emerald-700"] {
+        color: #74e6c3 !important;
+      }
+
+      .aec-dark [class~="text-violet-700"] {
+        color: #c4a7ff !important;
+      }
+
+      .aec-dark [class~="bg-blue-100"] {
+        background-color: #12345c !important;
+      }
+
+      .aec-dark [class~="bg-violet-100"] {
+        background-color: #31245b !important;
+      }
+
+      .aec-dark [class~="bg-amber-100"] {
+        background-color: #493514 !important;
+      }
+
+      .aec-dark [class~="bg-orange-100"] {
+        background-color: #4d2916 !important;
+      }
+
+      .aec-dark [class~="bg-cyan-100"] {
+        background-color: #123d49 !important;
+      }
+
+      .aec-dark [class~="bg-rose-100"] {
+        background-color: #4b1e31 !important;
+      }
+
+      .aec-dark [class~="bg-emerald-100"] {
+        background-color: #123e35 !important;
+      }
+    `}</style>
   );
 }
 

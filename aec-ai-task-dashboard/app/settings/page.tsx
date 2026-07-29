@@ -184,6 +184,7 @@ export default function SettingsPage() {
   const router = useRouter();
 
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
+  const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [saved, setSaved] = useState(false);
   const [logoError, setLogoError] = useState("");
   const [draggedColumn, setDraggedColumn] = useState<JobColumnKey | null>(null);
@@ -209,6 +210,42 @@ export default function SettingsPage() {
       setSettings(DEFAULT_SETTINGS);
     }
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const updateSystemMode = () => {
+      setSystemUsesDarkMode(mediaQuery.matches);
+    };
+
+    updateSystemMode();
+    mediaQuery.addEventListener("change", updateSystemMode);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateSystemMode);
+    };
+  }, []);
+
+  const darkModeIsActive =
+    settings.appearance === "dark" ||
+    (settings.appearance === "system" && systemUsesDarkMode);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      "aec-dark-root",
+      darkModeIsActive,
+    );
+    document.body.classList.toggle("aec-dark-body", darkModeIsActive);
+    document.documentElement.style.colorScheme = darkModeIsActive
+      ? "dark"
+      : "light";
+
+    return () => {
+      document.documentElement.classList.remove("aec-dark-root");
+      document.body.classList.remove("aec-dark-body");
+      document.documentElement.style.colorScheme = "";
+    };
+  }, [darkModeIsActive]);
 
   function updateTextField(field: keyof DashboardSettings, value: string) {
     setSettings((current) => ({
@@ -375,7 +412,12 @@ export default function SettingsPage() {
     "mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main
+      className={`min-h-screen bg-slate-50 ${
+        darkModeIsActive ? "aec-dark" : ""
+      }`}
+    >
+      <ThemeStyles />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-5 lg:px-8">
           <div>
@@ -834,20 +876,16 @@ export default function SettingsPage() {
               </>
             )}
 
-            {saved && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                Settings saved successfully.
-              </div>
-            )}
-
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                Reset Default
-              </button>
+              {activeCategory === "job-dashboard" && (
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  Reset Default
+                </button>
+              )}
 
               <button
                 type="button"
@@ -864,10 +902,103 @@ export default function SettingsPage() {
                 Save Settings
               </button>
             </div>
+
+            {saved && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                Settings saved successfully.
+              </div>
+            )}
           </div>
         </form>
       </div>
     </main>
+  );
+}
+
+function ThemeStyles() {
+  return (
+    <style>{`
+      .aec-dark-root,
+      .aec-dark-body {
+        background-color: #07111f !important;
+      }
+
+      .aec-dark {
+        background-color: #07111f !important;
+        color: #e5eefb;
+      }
+
+      .aec-dark [class~="bg-white"] {
+        background-color: #0d1b2e !important;
+      }
+
+      .aec-dark [class~="bg-slate-50"],
+      .aec-dark [class~="bg-slate-50/40"],
+      .aec-dark [class~="bg-slate-50/60"],
+      .aec-dark [class~="bg-slate-50/70"] {
+        background-color: #101f34 !important;
+      }
+
+      .aec-dark [class~="bg-slate-100"] {
+        background-color: #172941 !important;
+      }
+
+      .aec-dark [class~="bg-slate-200"] {
+        background-color: #243750 !important;
+      }
+
+      .aec-dark [class~="border-slate-100"],
+      .aec-dark [class~="border-slate-200"],
+      .aec-dark [class~="border-slate-300"] {
+        border-color: #2a3d57 !important;
+      }
+
+      .aec-dark [class~="text-slate-950"],
+      .aec-dark [class~="text-slate-900"],
+      .aec-dark [class~="text-slate-800"],
+      .aec-dark [class~="text-slate-700"] {
+        color: #f3f7fd !important;
+      }
+
+      .aec-dark [class~="text-slate-600"],
+      .aec-dark [class~="text-slate-500"] {
+        color: #a9b9ce !important;
+      }
+
+      .aec-dark [class~="text-slate-400"] {
+        color: #8395ad !important;
+      }
+
+      .aec-dark input {
+        background-color: #081525 !important;
+        border-color: #314761 !important;
+        color: #f8fbff !important;
+      }
+
+      .aec-dark input::placeholder {
+        color: #71849e !important;
+      }
+
+      .aec-dark [class~="bg-blue-50"] {
+        background-color: #112d52 !important;
+      }
+
+      .aec-dark [class~="text-blue-700"] {
+        color: #7db4ff !important;
+      }
+
+      .aec-dark [class~="bg-emerald-50"] {
+        background-color: #073a32 !important;
+      }
+
+      .aec-dark [class~="border-emerald-200"] {
+        border-color: #16866f !important;
+      }
+
+      .aec-dark [class~="text-emerald-700"] {
+        color: #74e6c3 !important;
+      }
+    `}</style>
   );
 }
 
