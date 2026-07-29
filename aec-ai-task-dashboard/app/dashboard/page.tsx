@@ -124,8 +124,8 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
    Only change these two table names if your Supabase names are different.
 ========================================================= */
 
-const JOBS_TABLE = "job";
-const STAFF_TABLE = "staff";
+const JOBS_TABLE = "aec-dashboard";
+const STAFF_TABLE = "saec-dashboard-admin";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
