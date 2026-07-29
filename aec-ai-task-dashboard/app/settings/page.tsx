@@ -245,10 +245,25 @@ export default function SettingsPage() {
   }
 
   function handleReset() {
-    setSettings(DEFAULT_SETTINGS);
+    const resettableDefaults: Pick<
+      DashboardSettings,
+      "showStageLegend" | "showSummary" | "autoCompleteDate" | "columnOrder"
+    > = {
+      showStageLegend: DEFAULT_SETTINGS.showStageLegend,
+      showSummary: DEFAULT_SETTINGS.showSummary,
+      autoCompleteDate: DEFAULT_SETTINGS.autoCompleteDate,
+      columnOrder: [...DEFAULT_COLUMN_ORDER],
+    };
+
+    const nextSettings = {
+      ...settings,
+      ...resettableDefaults,
+    };
+
+    setSettings(nextSettings);
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify(DEFAULT_SETTINGS),
+      JSON.stringify(nextSettings),
     );
     window.dispatchEvent(new Event("aec-settings-updated"));
     setSaved(true);
@@ -352,6 +367,87 @@ export default function SettingsPage() {
         </div>
 
         <form onSubmit={handleSave} className="space-y-6">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-6 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+              Category 1
+            </p>
+
+            <h3 className="mt-1 text-lg font-semibold text-slate-950">
+              Organization &amp; Branding
+            </h3>
+
+            <p className="mt-1 text-sm text-slate-600">
+              Manage the dashboard logo, company details and administrator
+              profile. Reset Default will not change these settings.
+            </p>
+          </div>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="border-b border-slate-100 pb-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Branding
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Upload the logo displayed beside the company name in the
+                Dashboard header.
+              </p>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+                <img
+                  src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
+                  alt="Dashboard logo preview"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-800">
+                  Dashboard Logo
+                </p>
+
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  JPG, PNG, WEBP or SVG. Maximum file size: 2 MB.
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">
+                    Upload New Logo
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml"
+                      onChange={handleLogoUpload}
+                      className="sr-only"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettings((current) => ({
+                        ...current,
+                        logoDataUrl: DEFAULT_LOGO_DATA_URL,
+                      }));
+                      setLogoError("");
+                      setSaved(false);
+                    }}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    Use Placeholder
+                  </button>
+                </div>
+
+                {logoError && (
+                  <p className="mt-3 text-sm font-medium text-rose-600">
+                    {logoError}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="border-b border-slate-100 pb-4">
               <h3 className="text-base font-semibold text-slate-900">
@@ -456,108 +552,20 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Dashboard Display
-              </h3>
+          <div className="rounded-2xl border border-slate-200 bg-slate-100/80 px-6 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Category 2
+            </p>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Choose which information appears on the dashboard.
-              </p>
-            </div>
+            <h3 className="mt-1 text-lg font-semibold text-slate-950">
+              Job &amp; Dashboard Settings
+            </h3>
 
-            <div className="mt-5 divide-y divide-slate-100">
-              <SettingToggle
-                title="Show Stage Legend"
-                description="Display the colour legend on the right side of the Job Progress Board."
-                checked={settings.showStageLegend}
-                onChange={(checked) => updateToggle("showStageLegend", checked)}
-              />
-
-              <SettingToggle
-                title="Show Summary"
-                description="Display the status totals and overall job total."
-                checked={settings.showSummary}
-                onChange={(checked) => updateToggle("showSummary", checked)}
-              />
-
-              <SettingToggle
-                title="Automatic Completion Date"
-                description="Automatically record the date and time when a job moves to Completed."
-                checked={settings.autoCompleteDate}
-                onChange={(checked) =>
-                  updateToggle("autoCompleteDate", checked)
-                }
-              />
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Branding
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Upload the logo displayed beside the company name in the
-                Dashboard header.
-              </p>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
-              <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
-                <img
-                  src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
-                  alt="Dashboard logo preview"
-                  className="h-full w-full object-contain"
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-800">
-                  Dashboard Logo
-                </p>
-
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  JPG, PNG, WEBP or SVG. Maximum file size: 2 MB.
-                </p>
-
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">
-                    Upload New Logo
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml"
-                      onChange={handleLogoUpload}
-                      className="sr-only"
-                    />
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSettings((current) => ({
-                        ...current,
-                        logoDataUrl: DEFAULT_LOGO_DATA_URL,
-                      }));
-                      setLogoError("");
-                      setSaved(false);
-                    }}
-                    className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    Use Placeholder
-                  </button>
-                </div>
-
-                {logoError && (
-                  <p className="mt-3 text-sm font-medium text-rose-600">
-                    {logoError}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
+            <p className="mt-1 text-sm text-slate-600">
+              Configure Job Information, Sheet Column Order and Dashboard
+              Display. Reset Default applies only to this category.
+            </p>
+          </div>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="border-b border-slate-100 pb-4">
@@ -629,6 +637,43 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="border-b border-slate-100 pb-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Dashboard Display
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Choose which information appears on the dashboard.
+              </p>
+            </div>
+
+            <div className="mt-5 divide-y divide-slate-100">
+              <SettingToggle
+                title="Show Stage Legend"
+                description="Display the colour legend on the right side of the Job Progress Board."
+                checked={settings.showStageLegend}
+                onChange={(checked) => updateToggle("showStageLegend", checked)}
+              />
+
+              <SettingToggle
+                title="Show Summary"
+                description="Display the status totals and overall job total."
+                checked={settings.showSummary}
+                onChange={(checked) => updateToggle("showSummary", checked)}
+              />
+
+              <SettingToggle
+                title="Automatic Completion Date"
+                description="Automatically record the date and time when a job moves to Completed."
+                checked={settings.autoCompleteDate}
+                onChange={(checked) =>
+                  updateToggle("autoCompleteDate", checked)
+                }
+              />
+            </div>
+          </section>
+
           {saved && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
               Settings saved successfully.
@@ -649,7 +694,7 @@ export default function SettingsPage() {
               onClick={() => router.push("/dashboard")}
               className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
             >
-              Cancel
+              Back to Dashboard
             </button>
 
             <button
