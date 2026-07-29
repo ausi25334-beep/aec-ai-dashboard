@@ -353,6 +353,170 @@ function StatusIcon({ status }: { status: JobStatus }) {
 }
 
 /* =========================================================
+   Read-only Job Table Sheet
+========================================================= */
+
+function JobDataTable({ jobs }: { jobs: Job[] }) {
+  const columns = [
+    "Job ID",
+    "Job In Date & Time",
+    "Sales Person",
+    "Sales Person Phone",
+    "Customer Status",
+    "Customer Name",
+    "Customer Phone",
+    "Customer Company Name",
+    "Assigned Technician",
+    "Technician Phone",
+    "Description / Item",
+    "Status",
+    "In Progress Start Date & Time",
+    "In Progress End Date & Time",
+    "Status Remark / Issue",
+    "Job Complete Date & Time",
+    "Invoice No.",
+    "Report No.",
+    "Collection Date & Time",
+  ];
+
+  return (
+    <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">
+            Job Information Sheet
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Complete read-only job records using the existing AEC fields
+          </p>
+        </div>
+
+        <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+          {jobs.length} {jobs.length === 1 ? "Job" : "Jobs"}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[3300px] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className="whitespace-nowrap border-r border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600 last:border-r-0"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {jobs.length > 0 ? (
+              jobs.map((job, index) => {
+                const styles = statusStyles[job.status];
+
+                return (
+                  <tr
+                    key={job.jobId}
+                    className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${
+                      index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                    }`}
+                  >
+                    <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3 text-sm font-semibold text-blue-600">
+                      {job.jobId || "-"}
+                    </td>
+
+                    <TableCell
+                      value={formatDisplayDateTime(job.jobInDateTime)}
+                    />
+                    <TableCell value={job.salesPerson} />
+                    <TableCell value={job.salesPersonPhone} />
+
+                    <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles.customerBadge}`}
+                      >
+                        {job.customerStatus || "-"}
+                      </span>
+                    </td>
+
+                    <TableCell value={job.customerName} emphasized />
+                    <TableCell value={job.customerPhone} />
+                    <TableCell value={job.customerCompanyName} />
+                    <TableCell value={job.assignedTechnician} />
+                    <TableCell value={job.technicianPhone} />
+                    <TableCell value={job.description} wide />
+
+                    <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles.calendar}`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${styles.dot}`}
+                        />
+                        {displayLabels[job.status]}
+                      </span>
+                    </td>
+
+                    <TableCell
+                      value={formatDisplayDateTime(job.inProgressStartDateTime)}
+                    />
+                    <TableCell
+                      value={formatDisplayDateTime(job.inProgressEndDateTime)}
+                    />
+                    <TableCell value={job.statusRemark} wide />
+                    <TableCell
+                      value={formatDisplayDateTime(job.jobCompleteDateTime)}
+                    />
+                    <TableCell value={job.invoiceNo} />
+                    <TableCell value={job.reportNo} />
+                    <TableCell
+                      value={formatDisplayDateTime(job.collectionDateTime)}
+                    />
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className="px-5 py-12 text-center text-sm text-slate-400"
+                >
+                  No job records available
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function TableCell({
+  value,
+  emphasized = false,
+  wide = false,
+}: {
+  value?: string;
+  emphasized?: boolean;
+  wide?: boolean;
+}) {
+  return (
+    <td
+      className={`border-r border-slate-100 px-4 py-3 text-sm last:border-r-0 ${
+        wide ? "min-w-[240px] whitespace-normal" : "whitespace-nowrap"
+      } ${emphasized ? "font-semibold text-slate-900" : "text-slate-600"}`}
+    >
+      {value?.trim() || "-"}
+    </td>
+  );
+}
+
+/* =========================================================
    Staff Directory
 ========================================================= */
 
@@ -605,13 +769,17 @@ function getCalendarDays(viewDate: Date) {
   const month = viewDate.getMonth();
   const firstDay = new Date(year, month, 1);
   const firstDayPosition = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const requiredWeeks = Math.ceil((firstDayPosition + daysInMonth) / 7);
+  const calendarCellCount = Math.max(35, requiredWeeks * 7);
 
   /*
-    The calendar is intentionally limited to five rows.
-    Previous-month dates at the beginning and next-month dates
-    within the fifth row remain visible with muted styling.
+    The calendar normally displays five rows and automatically
+    expands to six rows when the selected month needs the extra
+    week. Previous-month and next-month dates remain visible with
+    muted styling so every date in the current month is shown.
   */
-  return Array.from({ length: 35 }, (_, index) => {
+  return Array.from({ length: calendarCellCount }, (_, index) => {
     const date = new Date(year, month, index - firstDayPosition + 1);
 
     return {
@@ -1029,6 +1197,10 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
+
+        {/* Read-only Job Table Sheet */}
+
+        <JobDataTable jobs={jobs} />
 
         {/* Job Progress Board */}
 
