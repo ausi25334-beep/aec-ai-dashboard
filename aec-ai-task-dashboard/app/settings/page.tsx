@@ -1,6 +1,13 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 
 const JOB_COLUMN_KEYS = [
@@ -82,6 +89,12 @@ type DashboardSettings = {
 };
 
 type SettingsCategory = "organization" | "job-dashboard";
+
+type CurrentUser = {
+  name: string;
+  role: "owner" | "employee";
+  phoneNumber: string;
+};
 
 /*
   DEFAULT HEADER LOGO
@@ -192,6 +205,45 @@ export default function SettingsPage() {
   const [draggedColumn, setDraggedColumn] = useState<JobColumnKey | null>(null);
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategory>("organization");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function verifyLogin() {
+      try {
+        const response = await fetch("/api/auth/me", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          router.replace("/login");
+          router.refresh();
+          return;
+        }
+
+        const result = (await response.json()) as { user: CurrentUser };
+
+        if (mounted) {
+          setCurrentUser(result.user);
+        }
+      } catch {
+        router.replace("/login");
+        router.refresh();
+      } finally {
+        if (mounted) setAuthLoading(false);
+      }
+    }
+
+    void verifyLogin();
+    window.addEventListener("pageshow", verifyLogin);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("pageshow", verifyLogin);
+    };
+  }, [router]);
 
   useEffect(() => {
     try {
@@ -427,6 +479,25 @@ export default function SettingsPage() {
 
   const inputStyle =
     "mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
+
+  if (authLoading || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500">
+        Checking login...
+      </main>
+    );
+  }
+
+  if (currentUser.role !== "owner") {
+    return (
+      <EmployeeThemeSettings
+        currentUser={currentUser}
+        settings={settings}
+        setSettings={setSettings}
+        darkModeIsActive={darkModeIsActive}
+      />
+    );
+  }
 
   return (
     <main
@@ -928,6 +999,169 @@ export default function SettingsPage() {
             )}
           </div>
         </form>
+      </div>
+    </main>
+  );
+}
+
+function EmployeeThemeSettings({
+  currentUser,
+  settings,
+  setSettings,
+  darkModeIsActive,
+}: {
+  currentUser: CurrentUser;
+  settings: DashboardSettings;
+  setSettings: Dispatch<SetStateAction<DashboardSettings>>;
+  darkModeIsActive: boolean;
+}) {
+  const router = useRouter();
+  const [saved, setSaved] = useState(false);
+
+  function saveTheme() {
+    let protectedSettings = DEFAULT_SETTINGS;
+
+    try {
+      const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(
+          savedSettings,
+        ) as Partial<DashboardSettings>;
+
+        protectedSettings = {
+          ...DEFAULT_SETTINGS,
+          ...parsedSettings,
+          columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
+        };
+      }
+    } catch {
+      protectedSettings = DEFAULT_SETTINGS;
+    }
+
+    const nextSettings: DashboardSettings = {
+      ...protectedSettings,
+      appearance: settings.appearance,
+      appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
+    };
+
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify(nextSettings),
+    );
+    setSettings(nextSettings);
+    window.dispatchEvent(new Event("aec-settings-updated"));
+    setSaved(true);
+  }
+
+  return (
+    <main
+      className={`min-h-screen bg-slate-50 ${
+        darkModeIsActive ? "aec-dark" : ""
+      }`}
+    >
+      <ThemeStyles />
+
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 lg:px-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+              AEC Company
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+              Appearance Settings
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Signed in as {currentUser.name} · Theme access only
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+          >
+            <ArrowLeftIcon />
+            Back
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-base font-semibold text-slate-900">Theme</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Employees can change the Theme only. Branding, company
+              information, columns and dashboard controls are owner-only.
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <AppearanceOption
+              value="light"
+              title="Light Mode"
+              description="Default white and blue interface"
+              selected={settings.appearance === "light"}
+              onSelect={(value) => {
+                setSettings((current) => ({
+                  ...current,
+                  appearance: value,
+                }));
+                setSaved(false);
+              }}
+            />
+            <AppearanceOption
+              value="dark"
+              title="Dark Mode"
+              description="Black-blue interface with light text"
+              selected={settings.appearance === "dark"}
+              onSelect={(value) => {
+                setSettings((current) => ({
+                  ...current,
+                  appearance: value,
+                }));
+                setSaved(false);
+              }}
+            />
+            <AppearanceOption
+              value="system"
+              title="System"
+              description="Follow Chrome or device"
+              selected={settings.appearance === "system"}
+              onSelect={(value) => {
+                setSettings((current) => ({
+                  ...current,
+                  appearance: value,
+                }));
+                setSaved(false);
+              }}
+            />
+          </div>
+
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={saveTheme}
+              className="h-11 rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              Save Theme
+            </button>
+          </div>
+
+          {saved && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              Theme saved successfully.
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

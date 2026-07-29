@@ -1,144 +1,187 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      {hidden ? (
+        <>
+          <path d="m3 3 18 18" />
+          <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
+          <path d="M9.9 4.2A10.8 10.8 0 0 1 12 4c5.5 0 9.5 5 9.5 8a8.7 8.7 0 0 1-2 3.6" />
+          <path d="M6.6 6.6C4 8.2 2.5 10.5 2.5 12c0 3 4 8 9.5 8 1.3 0 2.5-.3 3.6-.7" />
+        </>
+      ) : (
+        <>
+          <path d="M2.5 12s3.5-8 9.5-8 9.5 8 9.5 8-3.5 8-9.5 8-9.5-8-9.5-8Z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      )}
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
-
-  const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    router.prefetch("/dashboard");
+  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setError("");
-
-    if (!username.trim()) {
-      setError("Please enter your username.");
+    if (!name.trim() || !password) {
+      setErrorMessage("Please enter your name and password.");
       return;
     }
 
-    if (!password.trim()) {
-      setError("Please enter your password.");
-      return;
+    setSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), password }),
+        cache: "no-store",
+      });
+      const result = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        setErrorMessage(result.message || "Name or password is incorrect.");
+        setPassword("");
+        return;
+      }
+
+      const requestedPath = new URLSearchParams(window.location.search).get(
+        "from",
+      );
+      const destination =
+        requestedPath?.startsWith("/") &&
+        !requestedPath.startsWith("//") &&
+        !requestedPath.startsWith("/login")
+          ? requestedPath
+          : "/dashboard";
+
+      router.replace(destination);
+      router.refresh();
+    } catch {
+      setErrorMessage("Unable to sign in. Please check your connection.");
+    } finally {
+      setSubmitting(false);
     }
-
-    setIsSigningIn(true);
-
-    // Phase 1: Mock Login
-    // 目前可以使用任何 Username 和 Password 登录。
-    // 之后连接 Supabase 时，再换成真实身份验证。
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    router.push("/dashboard");
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Company heading */}
-        <div className="mb-7 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-xl font-bold text-white shadow-lg">
-            AEC
-          </div>
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-5 py-10">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-[-8rem] top-[-8rem] h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
+        <div className="absolute bottom-[-10rem] right-[-5rem] h-96 w-96 rounded-full bg-cyan-500/15 blur-3xl" />
+      </div>
 
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
+      <section className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-white p-8 shadow-2xl sm:p-10">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-600/25">
+          A
+        </div>
+
+        <div className="mt-6 text-center">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">
+            AEC Company
+          </p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
             Welcome Back
           </h1>
-
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            Sign in to access the AI Task Management Dashboard.
+          <p className="mt-2 text-sm text-slate-500">
+            Sign in to the AI Task Management Dashboard.
           </p>
         </div>
 
-        {/* Login form */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-3xl border border-slate-200 bg-white p-7 shadow-xl shadow-slate-200/50 sm:p-8"
-        >
-          <div className="space-y-5">
-            {/* Username */}
-            <div>
-              <label
-                htmlFor="username"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                Username
-              </label>
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <div>
+            <label
+              htmlFor="name"
+              className="text-sm font-semibold text-slate-700"
+            >
+              Name
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              autoComplete="username"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={submitting}
+              className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+              placeholder="Enter your name"
+            />
+          </div>
 
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Enter your username"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <label
-                  htmlFor="password"
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Password
-                </label>
-
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-medium text-blue-600 transition hover:text-blue-700 hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-
+          <div>
+            <label
+              htmlFor="password"
+              className="text-sm font-semibold text-slate-700"
+            >
+              Password
+            </label>
+            <div className="relative mt-2">
               <input
                 id="password"
-                type="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                disabled={submitting}
+                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
                 placeholder="Enter your password"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                <EyeIcon hidden={showPassword} />
+              </button>
             </div>
           </div>
 
-          {/* Error message */}
-          {error && (
+          {errorMessage && (
             <div
               role="alert"
-              className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700"
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
             >
-              {error}
+              {errorMessage}
             </div>
           )}
 
-          {/* Sign in button */}
           <button
             type="submit"
-            disabled={isSigningIn}
-            className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={submitting}
+            className="flex h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/25 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSigningIn ? "Signing In..." : "Sign In"}
+            {submitting ? "Checking..." : "Sign In"}
           </button>
-
-          <p className="mt-5 text-center text-xs leading-5 text-slate-400">
-            Secure access for authorized personnel only
-          </p>
         </form>
-
-        <p className="mt-6 text-center text-xs leading-5 text-slate-400">
-          © 2026 AEC Company · AI Task Management System
-        </p>
-      </div>
+      </section>
     </main>
   );
 }
