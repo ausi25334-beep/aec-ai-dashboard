@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const JOB_COLUMN_KEYS = [
@@ -68,6 +68,7 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
 }
 
 type DashboardSettings = {
+  logoDataUrl: string;
   companyName: string;
   dashboardTitle: string;
   administratorName: string;
@@ -78,7 +79,16 @@ type DashboardSettings = {
   columnOrder: JobColumnKey[];
 };
 
+/*
+  DEFAULT HEADER LOGO
+  To change the built-in placeholder manually, replace this data URL.
+  The normal way to replace it is Settings > Branding > Upload New Logo.
+*/
+const DEFAULT_LOGO_DATA_URL =
+  "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='24' fill='%232563eb'/%3E%3Cpath d='M60 20 94 39v42L60 100 26 81V39Z' fill='none' stroke='white' stroke-width='7'/%3E%3Cpath d='m42 75 18-36 18 36M49 62h22' fill='none' stroke='white' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+
 const DEFAULT_SETTINGS: DashboardSettings = {
+  logoDataUrl: DEFAULT_LOGO_DATA_URL,
   companyName: "AEC Company",
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
@@ -130,17 +140,14 @@ function SettingsIcon() {
 export default function SettingsPage() {
   const router = useRouter();
 
-  const [settings, setSettings] =
-    useState<DashboardSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
-  const [draggedColumn, setDraggedColumn] =
-    useState<JobColumnKey | null>(null);
+  const [logoError, setLogoError] = useState("");
+  const [draggedColumn, setDraggedColumn] = useState<JobColumnKey | null>(null);
 
   useEffect(() => {
     try {
-      const savedSettings = window.localStorage.getItem(
-        SETTINGS_STORAGE_KEY,
-      );
+      const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
 
       if (savedSettings) {
         const parsedSettings = JSON.parse(
@@ -158,10 +165,7 @@ export default function SettingsPage() {
     }
   }, []);
 
-  function updateTextField(
-    field: keyof DashboardSettings,
-    value: string,
-  ) {
+  function updateTextField(field: keyof DashboardSettings, value: string) {
     setSettings((current) => ({
       ...current,
       [field]: value,
@@ -170,10 +174,7 @@ export default function SettingsPage() {
     setSaved(false);
   }
 
-  function updateToggle(
-    field: keyof DashboardSettings,
-    checked: boolean,
-  ) {
+  function updateToggle(field: keyof DashboardSettings, checked: boolean) {
     setSettings((current) => ({
       ...current,
       [field]: checked,
@@ -200,6 +201,49 @@ export default function SettingsPage() {
     setSaved(true);
   }
 
+  function handleLogoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    const acceptedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/svg+xml",
+    ];
+
+    if (!acceptedTypes.includes(file.type)) {
+      setLogoError("Please upload a JPG, PNG, WEBP or SVG image.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError("Logo file must be 2 MB or smaller.");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+
+      setSettings((current) => ({
+        ...current,
+        logoDataUrl: reader.result as string,
+      }));
+      setLogoError("");
+      setSaved(false);
+    };
+
+    reader.onerror = () => {
+      setLogoError("The logo could not be read. Please try another image.");
+    };
+
+    reader.readAsDataURL(file);
+  }
+
   function handleReset() {
     setSettings(DEFAULT_SETTINGS);
     window.localStorage.setItem(
@@ -215,7 +259,11 @@ export default function SettingsPage() {
       const currentIndex = current.columnOrder.indexOf(column);
       const newIndex = currentIndex + direction;
 
-      if (currentIndex < 0 || newIndex < 0 || newIndex >= current.columnOrder.length) {
+      if (
+        currentIndex < 0 ||
+        newIndex < 0 ||
+        newIndex >= current.columnOrder.length
+      ) {
         return current;
       }
 
@@ -328,10 +376,7 @@ export default function SettingsPage() {
                   id="companyName"
                   value={settings.companyName}
                   onChange={(event) =>
-                    updateTextField(
-                      "companyName",
-                      event.target.value,
-                    )
+                    updateTextField("companyName", event.target.value)
                   }
                   className={inputStyle}
                   placeholder="AEC Company"
@@ -350,10 +395,7 @@ export default function SettingsPage() {
                   id="dashboardTitle"
                   value={settings.dashboardTitle}
                   onChange={(event) =>
-                    updateTextField(
-                      "dashboardTitle",
-                      event.target.value,
-                    )
+                    updateTextField("dashboardTitle", event.target.value)
                   }
                   className={inputStyle}
                   placeholder="AI Task Management Dashboard"
@@ -386,10 +428,7 @@ export default function SettingsPage() {
                   id="administratorName"
                   value={settings.administratorName}
                   onChange={(event) =>
-                    updateTextField(
-                      "administratorName",
-                      event.target.value,
-                    )
+                    updateTextField("administratorName", event.target.value)
                   }
                   className={inputStyle}
                   placeholder="Administrator"
@@ -408,10 +447,7 @@ export default function SettingsPage() {
                   id="operationsTeam"
                   value={settings.operationsTeam}
                   onChange={(event) =>
-                    updateTextField(
-                      "operationsTeam",
-                      event.target.value,
-                    )
+                    updateTextField("operationsTeam", event.target.value)
                   }
                   className={inputStyle}
                   placeholder="Operations Team"
@@ -436,18 +472,14 @@ export default function SettingsPage() {
                 title="Show Stage Legend"
                 description="Display the colour legend on the right side of the Job Progress Board."
                 checked={settings.showStageLegend}
-                onChange={(checked) =>
-                  updateToggle("showStageLegend", checked)
-                }
+                onChange={(checked) => updateToggle("showStageLegend", checked)}
               />
 
               <SettingToggle
                 title="Show Summary"
                 description="Display the status totals and overall job total."
                 checked={settings.showSummary}
-                onChange={(checked) =>
-                  updateToggle("showSummary", checked)
-                }
+                onChange={(checked) => updateToggle("showSummary", checked)}
               />
 
               <SettingToggle
@@ -458,6 +490,72 @@ export default function SettingsPage() {
                   updateToggle("autoCompleteDate", checked)
                 }
               />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="border-b border-slate-100 pb-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Branding
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Upload the logo displayed beside the company name in the
+                Dashboard header.
+              </p>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+                <img
+                  src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
+                  alt="Dashboard logo preview"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-800">
+                  Dashboard Logo
+                </p>
+
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  JPG, PNG, WEBP or SVG. Maximum file size: 2 MB.
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <label className="inline-flex h-10 cursor-pointer items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700">
+                    Upload New Logo
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml"
+                      onChange={handleLogoUpload}
+                      className="sr-only"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettings((current) => ({
+                        ...current,
+                        logoDataUrl: DEFAULT_LOGO_DATA_URL,
+                      }));
+                      setLogoError("");
+                      setSaved(false);
+                    }}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    Use Placeholder
+                  </button>
+                </div>
+
+                {logoError && (
+                  <p className="mt-3 text-sm font-medium text-rose-600">
+                    {logoError}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -581,13 +679,9 @@ function SettingToggle({
   return (
     <div className="flex items-center justify-between gap-6 py-5 first:pt-0 last:pb-0">
       <div>
-        <p className="text-sm font-semibold text-slate-800">
-          {title}
-        </p>
+        <p className="text-sm font-semibold text-slate-800">{title}</p>
 
-        <p className="mt-1 text-sm leading-5 text-slate-500">
-          {description}
-        </p>
+        <p className="mt-1 text-sm leading-5 text-slate-500">{description}</p>
       </div>
 
       <button

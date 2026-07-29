@@ -257,6 +257,7 @@ const initialJobs: Job[] = [
 ========================================================= */
 
 type DashboardSettings = {
+  logoDataUrl: string;
   companyName: string;
   dashboardTitle: string;
   administratorName: string;
@@ -267,7 +268,16 @@ type DashboardSettings = {
   columnOrder: JobColumnKey[];
 };
 
+/*
+  DEFAULT HEADER LOGO
+  If you prefer to change the default placeholder manually, replace the
+  data URL below. Users can also upload a logo from Settings.
+*/
+const DEFAULT_LOGO_DATA_URL =
+  "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='24' fill='%232563eb'/%3E%3Cpath d='M60 20 94 39v42L60 100 26 81V39Z' fill='none' stroke='white' stroke-width='7'/%3E%3Cpath d='m42 75 18-36 18 36M49 62h22' fill='none' stroke='white' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+
 const DEFAULT_SETTINGS: DashboardSettings = {
+  logoDataUrl: DEFAULT_LOGO_DATA_URL,
   companyName: "AEC Company",
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
@@ -341,7 +351,13 @@ function PositionIcon() {
   );
 }
 
-function StatusIcon({ status }: { status: JobStatus }) {
+function StatusIcon({
+  status,
+  sizeClass = "h-6 w-6",
+}: {
+  status: JobStatus;
+  sizeClass?: string;
+}) {
   const commonProps = {
     viewBox: "0 0 24 24",
     fill: "none",
@@ -349,15 +365,17 @@ function StatusIcon({ status }: { status: JobStatus }) {
     strokeWidth: 2,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
-    className: "h-6 w-6",
+    className: sizeClass,
     "aria-hidden": true,
   };
 
   if (status === "New Job") {
     return (
       <svg {...commonProps}>
-        <path d="M12 5v14" />
-        <path d="M5 12h14" />
+        <rect x="3" y="7" width="18" height="13" rx="2" />
+        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <path d="M3 12h18" />
+        <path d="M10 12v2h4v-2" />
       </svg>
     );
   }
@@ -500,13 +518,7 @@ function JobDataTable({
   );
 }
 
-function JobTableCell({
-  job,
-  column,
-}: {
-  job: Job;
-  column: JobColumnKey;
-}) {
+function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
   const styles = statusStyles[job.status];
 
   if (column === "jobId") {
@@ -1070,14 +1082,24 @@ export default function DashboardPage() {
 
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1900px] items-center justify-between px-5 py-5 lg:px-8">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
-              {settings.companyName}
-            </p>
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <img
+                src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
+                alt={`${settings.companyName} logo`}
+                className="h-full w-full object-contain"
+              />
+            </div>
 
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-              {settings.dashboardTitle}
-            </h1>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                {settings.companyName}
+              </p>
+
+              <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
+                {settings.dashboardTitle}
+              </h1>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -1380,9 +1402,9 @@ export default function DashboardPage() {
                   <div className="flex min-h-[72px] items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-xl ${styles.iconBackground}`}
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm ${styles.iconBackground}`}
                       >
-                        <span className="h-3 w-3 rounded-full bg-white" />
+                        <StatusIcon status={status} sizeClass="h-5 w-5" />
                       </div>
 
                       <div>
@@ -1510,8 +1532,9 @@ export default function DashboardPage() {
                               <div
                                 className={`flex h-10 w-full items-center gap-2 rounded-lg border px-3 text-xs font-semibold ${styles.calendar}`}
                               >
-                                <span
-                                  className={`h-2.5 w-2.5 rounded-full ${styles.dot}`}
+                                <StatusIcon
+                                  status={job.status}
+                                  sizeClass="h-4 w-4 shrink-0"
                                 />
                                 {displayLabels[job.status]}
                               </div>
@@ -1664,7 +1687,7 @@ function StatisticCard({
       className="relative overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       style={{
         borderColor: `${hex}55`,
-        background: `linear-gradient(90deg, ${hex}20 0%, ${hex}20 48%, #ffffff 48%, #ffffff 100%)`,
+        background: `linear-gradient(180deg, ${hex}22 0%, ${hex}22 50%, #ffffff 50%, #ffffff 100%)`,
       }}
     >
       <div
