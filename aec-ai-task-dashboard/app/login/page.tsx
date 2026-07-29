@@ -98,7 +98,7 @@ export default function LoginPage() {
 
       <section className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-white p-8 shadow-2xl sm:p-10">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-600/25">
-          A
+          AEC
         </div>
 
         <div className="mt-6 text-center">
