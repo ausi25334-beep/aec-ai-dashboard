@@ -45,6 +45,23 @@ const DISTRIBUTION_STATUSES: readonly JobStatus[] = [
   "Pending Invoice",
 ];
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, "Full"] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
+type BoardPaginationState = Record<
+  JobStatus,
+  { page: number; pageSize: PageSize }
+>;
+
+function createDefaultBoardPagination(): BoardPaginationState {
+  return JOB_STATUSES.reduce(
+    (state, status) => {
+      state[status] = { page: 1, pageSize: 10 };
+      return state;
+    },
+    {} as BoardPaginationState,
+  );
+}
+
 type Job = {
   jobId: string;
   jobInDateTime: string;
@@ -130,6 +147,12 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
 };
 
 const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
+
+const HIDDEN_JOB_PHONE_COLUMNS = new Set<JobColumnKey>([
+  "customerPhone",
+  "technicianPhone",
+  "salesPersonPhone",
+]);
 
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
   const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
@@ -628,6 +651,19 @@ function JobDataTable({
   jobs: Job[];
   columnOrder: JobColumnKey[];
 }) {
+  const [pageSize, setPageSize] = useState<PageSize>(10);
+  const [page, setPage] = useState(1);
+  const visibleColumns = columnOrder.filter(
+    (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
+  );
+  const totalPages =
+    pageSize === "Full" ? 1 : Math.max(1, Math.ceil(jobs.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visibleJobs =
+    pageSize === "Full"
+      ? jobs
+      : jobs.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5">
@@ -647,10 +683,10 @@ function JobDataTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[3300px] border-collapse text-left">
+        <table className="w-full min-w-[2800px] border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              {columnOrder.map((column) => (
+              {visibleColumns.map((column) => (
                 <th
                   key={column}
                   scope="col"
@@ -663,8 +699,8 @@ function JobDataTable({
           </thead>
 
           <tbody>
-            {jobs.length > 0 ? (
-              jobs.map((job, index) => {
+            {visibleJobs.length > 0 ? (
+              visibleJobs.map((job, index) => {
                 return (
                   <tr
                     key={job.jobId}
@@ -672,7 +708,7 @@ function JobDataTable({
                       index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                     }`}
                   >
-                    {columnOrder.map((column) => (
+                    {visibleColumns.map((column) => (
                       <JobTableCell
                         key={`${job.jobId}-${column}`}
                         job={job}
@@ -685,7 +721,7 @@ function JobDataTable({
             ) : (
               <tr>
                 <td
-                  colSpan={columnOrder.length}
+                  colSpan={visibleColumns.length}
                   className="px-5 py-12 text-center text-sm text-slate-400"
                 >
                   No job records available
@@ -695,6 +731,18 @@ function JobDataTable({
           </tbody>
         </table>
       </div>
+
+      <PaginationControls
+        page={safePage}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        onPageSizeChange={(nextPageSize) => {
+          setPageSize(nextPageSize);
+          setPage(1);
+        }}
+        onPrevious={() => setPage(Math.max(1, safePage - 1))}
+        onNext={() => setPage(Math.min(totalPages, safePage + 1))}
+      />
     </section>
   );
 }
@@ -777,6 +825,74 @@ function TableCell({
   );
 }
 
+function PaginationControls({
+  page,
+  totalPages,
+  pageSize,
+  onPageSizeChange,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  pageSize: PageSize;
+  onPageSizeChange: (pageSize: PageSize) => void;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-5">
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
+        {PAGE_SIZE_OPTIONS.map((option) => {
+          const isSelected = option === pageSize;
+
+          return (
+            <button
+              type="button"
+              key={String(option)}
+              onClick={() => onPageSizeChange(option)}
+              className={`h-8 min-w-9 rounded-lg border px-2.5 text-xs font-semibold transition ${
+                isSelected
+                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+              }`}
+              aria-pressed={isSelected}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onPrevious}
+          disabled={page <= 1}
+          aria-label="Previous page"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-600"
+        >
+          <ChevronLeftIcon />
+        </button>
+
+        <span className="min-w-[72px] text-center text-xs font-semibold text-slate-500">
+          {page} / {totalPages}
+        </span>
+
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={page >= totalPages}
+          aria-label="Next page"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-600"
+        >
+          <ChevronRightIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* =========================================================
    Staff Directory
 ========================================================= */
@@ -787,9 +903,21 @@ type Staff = {
   phone: string;
   email: string;
   role: string;
+  employmentStatus: "Active" | "Terminated";
+  lastDayWorked: string;
 };
 
 function mapStaffRow(row: SupabaseRow, index: number): Staff {
+  const rawStatus = readText(row, ["status", "Status"]).trim().toLowerCase();
+  const lastDayWorked = readText(row, [
+    "last_day_work",
+    "last_day_worked",
+    "last day work",
+    "last day worked",
+    "Last Day Work",
+    "Last Day Worked",
+  ]).trim();
+
   return {
     id:
       readText(row, ["id", "staff_id", "staffId", "Staff ID"]) ||
@@ -803,6 +931,9 @@ function mapStaffRow(row: SupabaseRow, index: number): Staff {
     ]),
     email: readText(row, ["email", "Email"]),
     role: readText(row, ["role", "Role"]),
+    employmentStatus:
+      lastDayWorked || rawStatus !== "active" ? "Terminated" : "Active",
+    lastDayWorked,
   };
 }
 
@@ -1374,6 +1505,8 @@ export default function DashboardPage() {
   const [dataIsLoading, setDataIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [boardPagination, setBoardPagination] =
+    useState<BoardPaginationState>(createDefaultBoardPagination);
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -2078,8 +2211,23 @@ export default function DashboardPage() {
           <div className="mt-5 space-y-5">
             {JOB_STATUSES.map((status) => {
               const statusJobs = jobs.filter((job) => job.status === status);
-
               const styles = statusStyles[status];
+              const pagination = boardPagination[status];
+              const totalPages =
+                pagination.pageSize === "Full"
+                  ? 1
+                  : Math.max(
+                      1,
+                      Math.ceil(statusJobs.length / pagination.pageSize),
+                    );
+              const safePage = Math.min(pagination.page, totalPages);
+              const paginatedStatusJobs =
+                pagination.pageSize === "Full"
+                  ? statusJobs
+                  : statusJobs.slice(
+                      (safePage - 1) * pagination.pageSize,
+                      safePage * pagination.pageSize,
+                    );
 
               return (
                 <div
@@ -2122,7 +2270,7 @@ export default function DashboardPage() {
                   <div className="p-3 sm:p-4">
                     {statusJobs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                        {statusJobs.map((job) => (
+                        {paginatedStatusJobs.map((job) => (
                           <button
                             type="button"
                             key={job.jobId}
@@ -2241,6 +2389,36 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
+
+                  <PaginationControls
+                    page={safePage}
+                    totalPages={totalPages}
+                    pageSize={pagination.pageSize}
+                    onPageSizeChange={(nextPageSize) =>
+                      setBoardPagination((current) => ({
+                        ...current,
+                        [status]: { page: 1, pageSize: nextPageSize },
+                      }))
+                    }
+                    onPrevious={() =>
+                      setBoardPagination((current) => ({
+                        ...current,
+                        [status]: {
+                          ...current[status],
+                          page: Math.max(1, safePage - 1),
+                        },
+                      }))
+                    }
+                    onNext={() =>
+                      setBoardPagination((current) => ({
+                        ...current,
+                        [status]: {
+                          ...current[status],
+                          page: Math.min(totalPages, safePage + 1),
+                        },
+                      }))
+                    }
+                  />
                 </div>
               );
             })}
@@ -2266,16 +2444,13 @@ const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
   "jobId",
   "jobInDateTime",
   "salesPerson",
-  "salesPersonPhone",
   "customerStatus",
   "customerName",
-  "customerPhone",
   "customerCompanyName",
 ];
 
 const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
   "assignedTechnician",
-  "technicianPhone",
   "description",
   "status",
   "inProgressStartDateTime",
@@ -2590,9 +2765,21 @@ function StaffDirectory({ staff }: { staff: Staff[] }) {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {staffMember.name}
-                    </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 truncate text-sm font-semibold text-slate-900">
+                        {staffMember.name}
+                      </p>
+
+                      <span
+                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                          staffMember.employmentStatus === "Active"
+                            ? "border-cyan-200 bg-cyan-100 text-cyan-800"
+                            : "border-red-200 bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {staffMember.employmentStatus}
+                      </span>
+                    </div>
 
                     <a
                       href={`tel:${staffMember.phone}`}
