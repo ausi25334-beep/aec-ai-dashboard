@@ -181,7 +181,7 @@ const STAFF_TABLE = "aec-dashboard-admin";
   TypeScript report the query result as GenericStringError.
 */
 const JOBS_SELECT_COLUMNS =
-  "job_id,job_in_datetime,sales_person,customer_status,customer_name,customer_company_name,assigned_engineer,description_item,status,in_progress_start_datetime,in_progress_end_datetime,status_remark_issue,job_complete_datetime,invoice_no,report_no,collection_datetime" as const;
+  "job_id,job_in_datetime,sales_person,customer_status,customer_name,customer_company_name,assigned_engineer,description,status,in_progress_start_datetime,in_progress_end_datetime,status_remark_issue,job_complete_datetime,invoice_no,report_no,collection_datetime" as const;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -216,7 +216,7 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "assignedEngineer",
     "Assigned Engineer",
   ],
-  description: ["description_item", "description", "Description / Item"],
+  description: ["description", "Description / Item"],
   status: ["status", "Status"],
   inProgressStartDateTime: [
     "in_progress_start_datetime",
@@ -334,7 +334,6 @@ function mapJobRow(row: SupabaseRow): Job {
       "Assigned Engineer",
     ]),
     description: readText(row, [
-      "description_item",
       "description",
       "Description / Item",
     ]),
