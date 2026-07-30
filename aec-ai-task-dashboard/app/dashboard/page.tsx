@@ -64,23 +64,23 @@ type Job = {
 const JOB_COLUMN_KEYS = [
   "jobId",
   "jobInDateTime",
-  "salesPerson",
-  "salesPersonPhone",
   "customerStatus",
+  "status",
+  "customerCompanyName",
   "customerName",
   "customerPhone",
-  "customerCompanyName",
-  "assignedTechnician",
-  "technicianPhone",
   "description",
-  "status",
-  "inProgressStartDateTime",
-  "inProgressEndDateTime",
   "statusRemark",
-  "jobCompleteDateTime",
-  "invoiceNo",
   "reportNo",
   "collectionDateTime",
+  "assignedTechnician",
+  "technicianPhone",
+  "jobCompleteDateTime",
+  "invoiceNo",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "salesPerson",
+  "salesPersonPhone",
 ] as const;
 
 type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
@@ -361,7 +361,7 @@ type DashboardSettings = {
   companyName: string;
   dashboardTitle: string;
   administratorName: string;
-  topmanagementSetting: string;
+  operationsTeam: string;
   appearance: "system" | "light" | "dark";
   appearanceDefaultVersion: number;
   language: string;
@@ -396,7 +396,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   companyName: "AEC Company",
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
-  topmanagementSetting: "Top Management Setting",
+  operationsTeam: "Operations Team",
   appearance: "light",
   appearanceDefaultVersion: 2,
   language: "default",
@@ -1701,7 +1701,7 @@ export default function DashboardPage() {
               </p>
 
               <p className="text-xs text-slate-400">
-                {settings.topmanagementSetting}
+                {settings.operationsTeam}
               </p>
             </div>
 
