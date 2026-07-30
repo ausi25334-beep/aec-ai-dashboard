@@ -92,9 +92,23 @@ type SettingsCategory = "organization" | "job-dashboard";
 
 type CurrentUser = {
   name: string;
-  role: "owner" | "employee";
+  role: string;
   phoneNumber: string;
 };
+
+const SETTINGS_ACCESS_ROLES = [
+  "Owner",
+  "Founder",
+  "Principal",
+  "General Manager",
+] as const;
+
+function canManageSettings(role: string | undefined) {
+  return (
+    typeof role === "string" &&
+    (SETTINGS_ACCESS_ROLES as readonly string[]).includes(role)
+  );
+}
 
 /*
   DEFAULT HEADER LOGO
@@ -375,7 +389,7 @@ export default function SettingsPage() {
   }
 
   async function saveSharedSettings(nextSettings: DashboardSettings) {
-    if (currentUser?.role !== "owner") return false;
+    if (!canManageSettings(currentUser?.role)) return false;
 
     setSaving(true);
     setSaveError("");
@@ -416,7 +430,7 @@ export default function SettingsPage() {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (currentUser?.role !== "owner") return;
+    if (!canManageSettings(currentUser?.role)) return;
 
     const normalizedSettings = normalizeSettings(settings);
 
@@ -555,7 +569,7 @@ export default function SettingsPage() {
     );
   }
 
-  if (currentUser.role !== "owner") {
+  if (!canManageSettings(currentUser.role)) {
     return (
       <ManagedSettingsNotice
         currentUser={currentUser}
@@ -1125,12 +1139,12 @@ function ManagedSettingsNotice({
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="border-b border-slate-100 pb-4">
             <h2 className="text-base font-semibold text-slate-900">
-              Settings managed by owner
+              Settings managed by management
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               Company information, Branding, Theme, Language, System and
               Dashboard preferences are shared with every account. Only the
-              owner can change them.
+              Owner, Founder, Principal, or General Manager can change them.
             </p>
           </div>
 

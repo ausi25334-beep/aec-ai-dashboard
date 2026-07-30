@@ -3,10 +3,21 @@ export const SESSION_DURATION_SECONDS = 60 * 60 * 8;
 
 export type SessionUser = {
   name: string;
-  role: "owner" | "employee";
+  role: string;
   phoneNumber: string;
   expiresAt: number;
 };
+
+export const SETTINGS_ACCESS_ROLES = [
+  "Owner",
+  "Founder",
+  "Principal",
+  "General Manager",
+] as const;
+
+export function canManageSettings(role: string) {
+  return (SETTINGS_ACCESS_ROLES as readonly string[]).includes(role);
+}
 
 const encoder = new TextEncoder();
 
@@ -97,7 +108,8 @@ export async function readSessionToken(
     if (
       !payload ||
       typeof payload.name !== "string" ||
-      (payload.role !== "owner" && payload.role !== "employee") ||
+      typeof payload.role !== "string" ||
+      !payload.role.trim() ||
       typeof payload.phoneNumber !== "string" ||
       typeof payload.expiresAt !== "number" ||
       payload.expiresAt <= Date.now()

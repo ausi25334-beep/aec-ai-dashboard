@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
+  canManageSettings,
   readSessionToken,
   SESSION_COOKIE_NAME,
 } from "../../../lib/auth-session";
@@ -126,9 +127,12 @@ export async function PUT(request: Request) {
     );
   }
 
-  if (user.role !== "owner") {
+  if (!canManageSettings(user.role)) {
     return NextResponse.json(
-      { message: "Only the owner can change company settings." },
+      {
+        message:
+          "Only Owner, Founder, Principal, or General Manager can change company settings.",
+      },
       { status: 403, headers: { "Cache-Control": "no-store" } },
     );
   }

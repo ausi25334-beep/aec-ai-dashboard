@@ -28,9 +28,8 @@ function passwordsMatch(expected: string, received: string) {
   return timingSafeEqual(expectedHash, receivedHash);
 }
 
-function getRole(row: StaffRow): "owner" | "employee" {
-  const rawRole = textValue(row[ROLE_COLUMN]).toLowerCase();
-  return rawRole === "owner" ? "owner" : "employee";
+function getRole(row: StaffRow) {
+  return textValue(row[ROLE_COLUMN]) || "Employee";
 }
 
 export async function POST(request: Request) {

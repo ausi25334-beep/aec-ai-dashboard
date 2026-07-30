@@ -372,6 +372,17 @@ type DashboardSettings = {
   columnOrder: JobColumnKey[];
 };
 
+const SETTINGS_ACCESS_ROLES = [
+  "Owner",
+  "Founder",
+  "Principal",
+  "General Manager",
+] as const;
+
+function canManageSettings(role: string) {
+  return (SETTINGS_ACCESS_ROLES as readonly string[]).includes(role);
+}
+
 /*
   DEFAULT HEADER LOGO
   If you prefer to change the default placeholder manually, replace the
@@ -1306,6 +1317,7 @@ export default function DashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [currentUserName, setCurrentUserName] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -1343,9 +1355,10 @@ export default function DashboardPage() {
         }
 
         const result = (await response.json()) as {
-          user?: { name?: string };
+          user?: { name?: string; role?: string };
         };
         const name = result.user?.name?.trim();
+        const role = result.user?.role?.trim() || "";
 
         if (!name) {
           router.replace("/login");
@@ -1353,7 +1366,10 @@ export default function DashboardPage() {
           return;
         }
 
-        if (mounted) setCurrentUserName(name);
+        if (mounted) {
+          setCurrentUserName(name);
+          setCurrentUserRole(role);
+        }
       } catch {
         router.replace("/login");
         router.refresh();
@@ -1689,15 +1705,17 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => router.push("/settings")}
-              title="Settings"
-              aria-label="Open settings"
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-            >
-              <SettingsIcon />
-            </button>
+            {canManageSettings(currentUserRole) && (
+              <button
+                type="button"
+                onClick={() => router.push("/settings")}
+                title="Settings"
+                aria-label="Open settings"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+              >
+                <SettingsIcon />
+              </button>
+            )}
 
             <button
               type="button"
