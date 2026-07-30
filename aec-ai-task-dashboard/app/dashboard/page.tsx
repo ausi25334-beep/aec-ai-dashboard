@@ -13,15 +13,37 @@ import { createClient } from "@supabase/supabase-js";
 
 const JOB_STATUSES = [
   "New Job",
+  "Pending Job",
   "Claim Warranty",
-  "Pending Invoice",
   "Pending Parts",
   "Pending Quotation",
-  "Pending Spec Parts",
+  "Pending Invoice",
   "Complete",
 ] as const;
 
 type JobStatus = (typeof JOB_STATUSES)[number];
+
+const TOP_STATUSES: readonly JobStatus[] = [
+  "New Job",
+  "Pending Job",
+  "Complete",
+];
+
+const SECOND_ROW_STATUSES: readonly JobStatus[] = [
+  "Claim Warranty",
+  "Pending Parts",
+  "Pending Quotation",
+  "Pending Invoice",
+];
+
+const DISTRIBUTION_STATUSES: readonly JobStatus[] = [
+  "New Job",
+  "Pending Job",
+  "Claim Warranty",
+  "Pending Parts",
+  "Pending Quotation",
+  "Pending Invoice",
+];
 
 type Job = {
   jobId: string;
@@ -247,11 +269,14 @@ function normalizeJobStatus(value: string): JobStatus {
   const aliases: Record<string, JobStatus> = {
     "new job": "New Job",
     "new jobs": "New Job",
+    "pending job": "Pending Job",
+    "pending jobs": "Pending Job",
     "claim warranty": "Claim Warranty",
     "pending invoice": "Pending Invoice",
     "pending parts": "Pending Parts",
     "pending quotation": "Pending Quotation",
-    "pending spec parts": "Pending Spec Parts",
+    "pending spare parts": "Pending Parts",
+    "pending spec parts": "Pending Parts",
     complete: "Complete",
     completed: "Complete",
   };
@@ -518,6 +543,15 @@ function StatusIcon({
     );
   }
 
+  if (status === "Pending Job") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+
   if (status === "Claim Warranty") {
     return (
       <svg {...commonProps}>
@@ -553,15 +587,6 @@ function StatusIcon({
         <path d="M9 8h6" />
         <path d="M9 12h6" />
         <path d="M9 16h3" />
-      </svg>
-    );
-  }
-
-  if (status === "Pending Spec Parts") {
-    return (
-      <svg {...commonProps}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4V21h-4v-1.6a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15H3v-4h1.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6V3h4v1.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9H21v4h-1.6Z" />
       </svg>
     );
   }
@@ -792,6 +817,18 @@ const statusStyles: Record<
       "border border-blue-500 bg-blue-100 text-blue-800 shadow-sm ring-1 ring-blue-200",
     hex: "#3b82f6",
   },
+  "Pending Job": {
+    dot: "bg-rose-500",
+    badge: "bg-rose-50 text-rose-700",
+    numberBadge: "bg-rose-500 text-white",
+    leftBorder: "border-l-rose-500",
+    iconBackground: "bg-rose-500",
+    selectFocus: "focus:border-rose-500 focus:ring-rose-500/10",
+    calendar: "border-rose-300 bg-rose-100 text-rose-800",
+    customerBadge:
+      "border border-rose-500 bg-rose-100 text-rose-800 shadow-sm ring-1 ring-rose-200",
+    hex: "#f43f5e",
+  },
   "Claim Warranty": {
     dot: "bg-violet-500",
     badge: "bg-violet-50 text-violet-700",
@@ -840,18 +877,6 @@ const statusStyles: Record<
       "border border-cyan-500 bg-cyan-100 text-cyan-800 shadow-sm ring-1 ring-cyan-200",
     hex: "#06b6d4",
   },
-  "Pending Spec Parts": {
-    dot: "bg-rose-500",
-    badge: "bg-rose-50 text-rose-700",
-    numberBadge: "bg-rose-500 text-white",
-    leftBorder: "border-l-rose-500",
-    iconBackground: "bg-rose-500",
-    selectFocus: "focus:border-rose-500 focus:ring-rose-500/10",
-    calendar: "border-rose-300 bg-rose-100 text-rose-800",
-    customerBadge:
-      "border border-rose-500 bg-rose-100 text-rose-800 shadow-sm ring-1 ring-rose-200",
-    hex: "#f43f5e",
-  },
   Complete: {
     dot: "bg-emerald-500",
     badge: "bg-emerald-50 text-emerald-700",
@@ -882,31 +907,36 @@ function getCustomerStatusStyle(customerStatus?: string) {
 
 const displayLabels: Record<JobStatus, string> = {
   "New Job": "New Job",
+  "Pending Job": "Pending Job",
   "Claim Warranty": "Claim Warranty",
-  "Pending Invoice": "Pending Invoice",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
-  "Pending Spec Parts": "Pending Spec Parts",
+  "Pending Invoice": "Pending Invoice",
   Complete: "Completed",
 };
 
 const statisticLabels: Record<JobStatus, string> = {
   "New Job": "New Jobs",
+  "Pending Job": "Pending Jobs",
   "Claim Warranty": "Claim Warranty",
-  "Pending Invoice": "Pending Invoice",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
-  "Pending Spec Parts": "Pending Spec Parts",
+  "Pending Invoice": "Pending Invoice",
   Complete: "Completed",
+};
+
+const distributionLabels: Record<JobStatus, string> = {
+  ...displayLabels,
+  "Pending Job": "Pending Jobs",
 };
 
 const statusDescriptions: Record<JobStatus, string> = {
   "New Job": "Newly created jobs",
+  "Pending Job": "Jobs waiting for the next action",
   "Claim Warranty": "Jobs under warranty claim",
-  "Pending Invoice": "Waiting for invoice processing",
   "Pending Parts": "Waiting for required parts",
   "Pending Quotation": "Waiting for quotation approval",
-  "Pending Spec Parts": "Waiting for parts specification",
+  "Pending Invoice": "Waiting for invoice processing",
   Complete: "Successfully completed jobs",
 };
 
@@ -1751,22 +1781,28 @@ export default function DashboardPage() {
         {/* Status Categories */}
 
         <section className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {statisticCards
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {TOP_STATUSES.map((status) =>
+              statisticCards.find((card) => card.status === status),
+            )
               .filter(
-                (card) =>
-                  card.status === "New Job" || card.status === "Complete",
+                (
+                  card,
+                ): card is (typeof statisticCards)[number] => card !== undefined,
               )
               .map((card) => (
                 <StatisticCard key={card.status} {...card} />
               ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {statisticCards
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {SECOND_ROW_STATUSES.map((status) =>
+              statisticCards.find((card) => card.status === status),
+            )
               .filter(
-                (card) =>
-                  card.status !== "New Job" && card.status !== "Complete",
+                (
+                  card,
+                ): card is (typeof statisticCards)[number] => card !== undefined,
               )
               .map((card) => (
                 <StatisticCard key={card.status} {...card} />
@@ -1783,7 +1819,7 @@ export default function DashboardPage() {
             weekTotal={totalOrdersThisWeek}
           />
 
-          <JobStatusChart statusCounts={statusCounts} totalJobs={jobs.length} />
+          <JobStatusChart statusCounts={statusCounts} />
         </section>
 
         {/* Staff Directory */}
@@ -2811,14 +2847,16 @@ function WeeklyOrderChart({
 
 function JobStatusChart({
   statusCounts,
-  totalJobs,
 }: {
   statusCounts: Record<JobStatus, number>;
-  totalJobs: number;
 }) {
+  const totalJobs = DISTRIBUTION_STATUSES.reduce(
+    (total, status) => total + statusCounts[status],
+    0,
+  );
   let accumulatedPercentage = 0;
 
-  const gradientSections = JOB_STATUSES.map((status) => {
+  const gradientSections = DISTRIBUTION_STATUSES.map((status) => {
     const percentage =
       totalJobs > 0 ? (statusCounts[status] / totalJobs) * 100 : 0;
 
@@ -2856,13 +2894,13 @@ function JobStatusChart({
             </span>
 
             <span className="mt-1 text-xs font-medium text-slate-500">
-              Total Jobs
+              Active Jobs
             </span>
           </div>
         </div>
 
         <div className="grid w-full max-w-sm grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          {JOB_STATUSES.map((status) => {
+          {DISTRIBUTION_STATUSES.map((status) => {
             const percentage =
               totalJobs > 0
                 ? Math.round((statusCounts[status] / totalJobs) * 100)
@@ -2882,7 +2920,7 @@ function JobStatusChart({
                   />
 
                   <span className="truncate text-xs font-medium text-slate-600">
-                    {displayLabels[status]}
+                    {distributionLabels[status]}
                   </span>
                 </div>
 
