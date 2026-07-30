@@ -19,7 +19,7 @@ const JOB_COLUMN_KEYS = [
   "statusRemark",
   "reportNo",
   "collectionDateTime",
-  "assignedTechnician",
+  "assignedEngineer",
   "jobCompleteDateTime",
   "invoiceNo",
   "inProgressStartDateTime",
@@ -36,7 +36,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   customerStatus: "Customer Status",
   customerName: "Customer Name",
   customerCompanyName: "Customer Company Name",
-  assignedTechnician: "Assigned Engineer",
+  assignedEngineer: "Assigned Engineer",
   description: "Description / Item",
   status: "Status",
   inProgressStartDateTime: "In Progress Start Date & Time",
@@ -53,10 +53,14 @@ const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
   const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
   const savedKeys = Array.isArray(value)
-    ? value.filter(
-        (key): key is JobColumnKey =>
-          typeof key === "string" && validKeys.has(key as JobColumnKey),
-      )
+    ? value
+        .filter((key): key is string => typeof key === "string")
+        .map((key) =>
+          key === "assignedTechnician" ? "assignedEngineer" : key,
+        )
+        .filter((key): key is JobColumnKey =>
+          validKeys.has(key as JobColumnKey),
+        )
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
