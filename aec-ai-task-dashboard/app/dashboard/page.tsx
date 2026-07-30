@@ -494,6 +494,24 @@ function PhoneIcon() {
   );
 }
 
+function EmailIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4 shrink-0"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m4 7 8 6 8-6" />
+    </svg>
+  );
+}
+
 function PositionIcon() {
   return (
     <svg
@@ -767,7 +785,8 @@ type Staff = {
   id: string;
   name: string;
   phone: string;
-  position: string;
+  email: string;
+  role: string;
 };
 
 function mapStaffRow(row: SupabaseRow, index: number): Staff {
@@ -782,7 +801,8 @@ function mapStaffRow(row: SupabaseRow, index: number): Staff {
       "phoneNumber",
       "Phone Number",
     ]),
-    position: readText(row, ["position", "Position"]),
+    email: readText(row, ["email", "Email"]),
+    role: readText(row, ["role", "Role"]),
   };
 }
 
@@ -1664,7 +1684,7 @@ export default function DashboardPage() {
     (job) => getJobDateKey(job.jobInDateTime) === formatDateKey(today),
   ).length;
 
-  const totalOrdersThisWeek = weeklyData.reduce(
+  const totalJobsThisWeek = weeklyData.reduce(
     (total, item) => total + item.value,
     0,
   );
@@ -1813,10 +1833,10 @@ export default function DashboardPage() {
         {/* Two Charts */}
 
         <section className="mt-8 grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <WeeklyOrderChart
+          <WeeklyJobChart
             data={weeklyData}
             todayCount={todayJobCount}
-            weekTotal={totalOrdersThisWeek}
+            weekTotal={totalJobsThisWeek}
           />
 
           <JobStatusChart statusCounts={statusCounts} />
@@ -2545,7 +2565,7 @@ function StaffDirectory({ staff }: { staff: Staff[] }) {
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Employee contact details
+                Contact Details
               </p>
             </div>
           </div>
@@ -2579,13 +2599,29 @@ function StaffDirectory({ staff }: { staff: Staff[] }) {
                       className="mt-1 flex items-center gap-1.5 truncate text-xs font-medium text-slate-500 transition hover:text-blue-600"
                     >
                       <PhoneIcon />
-                      <span className="truncate">{staffMember.phone}</span>
+                      <span className="truncate">
+                        {staffMember.phone || "Phone not set"}
+                      </span>
+                    </a>
+
+                    <a
+                      href={
+                        staffMember.email
+                          ? `mailto:${staffMember.email}`
+                          : undefined
+                      }
+                      className="mt-1 flex items-center gap-1.5 truncate text-xs font-medium text-slate-500 transition hover:text-blue-600"
+                    >
+                      <EmailIcon />
+                      <span className="truncate">
+                        {staffMember.email || "Email not set"}
+                      </span>
                     </a>
 
                     <p className="mt-1 flex items-center gap-1.5 truncate text-xs font-medium text-slate-500">
                       <PositionIcon />
                       <span className="truncate">
-                        {staffMember.position || "Position not set"}
+                        {staffMember.role || "Role not set"}
                       </span>
                     </p>
                   </div>
@@ -2687,10 +2723,10 @@ function StatisticCard({
 }
 
 /* =========================================================
-   Weekly Order Trend Chart
+   Weekly Job Trend Chart
 ========================================================= */
 
-function WeeklyOrderChart({
+function WeeklyJobChart({
   data,
   todayCount,
   weekTotal,
@@ -2746,7 +2782,7 @@ function WeeklyOrderChart({
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div>
         <h2 className="text-lg font-semibold text-slate-950">
-          Weekly Order Trend
+          Weekly Job Trend
         </h2>
 
         <p className="mt-1 text-sm text-slate-500">Jobs created this week</p>
@@ -2755,7 +2791,7 @@ function WeeklyOrderChart({
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200 px-4 py-3">
           <p className="text-xs font-medium text-slate-500">
-            Today&apos;s Order Count
+            Today&apos;s Job Count
           </p>
 
           <p className="mt-2 text-2xl font-semibold text-slate-950">
@@ -2765,7 +2801,7 @@ function WeeklyOrderChart({
 
         <div className="rounded-xl border border-slate-200 px-4 py-3">
           <p className="text-xs font-medium text-slate-500">
-            Total Orders This Week
+            Total Jobs This Week
           </p>
 
           <p className="mt-2 text-2xl font-semibold text-slate-950">
