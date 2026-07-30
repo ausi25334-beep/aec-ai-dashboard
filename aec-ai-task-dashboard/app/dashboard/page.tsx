@@ -1705,17 +1705,23 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            {canManageSettings(currentUserRole) && (
-              <button
-                type="button"
-                onClick={() => router.push("/settings")}
-                title="Settings"
-                aria-label="Open settings"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
-              >
-                <SettingsIcon />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => router.push("/settings")}
+              title={
+                canManageSettings(currentUserRole)
+                  ? "Settings"
+                  : "View settings access"
+              }
+              aria-label={
+                canManageSettings(currentUserRole)
+                  ? "Open settings"
+                  : "View settings access information"
+              }
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+            >
+              <SettingsIcon />
+            </button>
 
             <button
               type="button"

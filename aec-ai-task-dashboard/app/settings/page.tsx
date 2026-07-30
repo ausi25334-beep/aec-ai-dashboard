@@ -1139,18 +1139,27 @@ function ManagedSettingsNotice({
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="border-b border-slate-100 pb-4">
             <h2 className="text-base font-semibold text-slate-900">
-              Settings managed by management
+              Settings access is restricted
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Company information, Branding, Theme, Language, System and
-              Dashboard preferences are shared with every account. Only the
-              Owner, Founder, Principal, or General Manager can change them.
+              You can view this Settings page, but your account cannot change
+              any settings. Only Owner, Founder, Principal, or General Manager
+              can configure the company Dashboard.
+            </p>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+            <p className="text-sm font-semibold text-amber-900">
+              Your role: {currentUser.role || "Not assigned"}
+            </p>
+            <p className="mt-1 text-sm text-amber-700">
+              All controls and saving functions are locked for this account.
             </p>
           </div>
 
           <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
             <p className="text-sm font-semibold text-blue-900">
-              Current company Theme
+              Current shared company Theme
             </p>
             <p className="mt-1 text-sm capitalize text-blue-700">
               {settings.appearance} mode
