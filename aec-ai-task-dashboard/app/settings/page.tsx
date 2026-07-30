@@ -3,8 +3,6 @@
 import {
   ChangeEvent,
   FormEvent,
-  type Dispatch,
-  type SetStateAction,
   useEffect,
   useState,
 } from "react";
@@ -123,57 +121,24 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
-const USER_SETTINGS_STORAGE_PREFIX = "aec-dashboard-user-settings:";
 
-type PerAccountTheme = Pick<
-  DashboardSettings,
-  "appearance" | "appearanceDefaultVersion"
->;
+function normalizeSettings(value: unknown): DashboardSettings {
+  const saved =
+    value && typeof value === "object"
+      ? (value as Partial<DashboardSettings>)
+      : {};
 
-const DEFAULT_PER_ACCOUNT_THEME: PerAccountTheme = {
-  appearance: DEFAULT_SETTINGS.appearance,
-  appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
-};
-
-function getUserSettingsStorageKey(name: string) {
-  return `${USER_SETTINGS_STORAGE_PREFIX}${encodeURIComponent(
-    name.trim().toLowerCase(),
-  )}`;
-}
-
-function loadPerAccountTheme(name: string): PerAccountTheme {
-  try {
-    const savedValue = window.localStorage.getItem(
-      getUserSettingsStorageKey(name),
-    );
-
-    if (!savedValue) return DEFAULT_PER_ACCOUNT_THEME;
-
-    const parsedValue = JSON.parse(savedValue) as Partial<PerAccountTheme>;
-
-    return {
-      appearance:
-        parsedValue.appearance === "dark" ||
-        parsedValue.appearance === "system" ||
-        parsedValue.appearance === "light"
-          ? parsedValue.appearance
-          : DEFAULT_PER_ACCOUNT_THEME.appearance,
-      appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
-    };
-  } catch {
-    return DEFAULT_PER_ACCOUNT_THEME;
-  }
-}
-
-function savePerAccountTheme(
-  name: string,
-  preferences: PerAccountTheme,
-) {
-  window.localStorage.setItem(
-    getUserSettingsStorageKey(name),
-    JSON.stringify(preferences),
-  );
+  return {
+    ...DEFAULT_SETTINGS,
+    ...saved,
+    appearance:
+      saved.appearance === "dark" ||
+      saved.appearance === "system" ||
+      saved.appearance === "light"
+        ? saved.appearance
+        : DEFAULT_SETTINGS.appearance,
+    columnOrder: normalizeColumnOrder(saved.columnOrder),
+  };
 }
 
 function ArrowLeftIcon() {
@@ -263,6 +228,9 @@ export default function SettingsPage() {
     useState<SettingsCategory>("organization");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -304,35 +272,52 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!currentUser) return;
 
-    try {
-      const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-      const perAccountTheme = loadPerAccountTheme(currentUser.name);
+    let mounted = true;
 
-      if (savedSettings) {
-        const parsedSettings = JSON.parse(
-          savedSettings,
-        ) as Partial<DashboardSettings>;
+    async function loadSharedSettings() {
+      setSettingsLoading(true);
 
-        const nextSettings: DashboardSettings = {
-          ...DEFAULT_SETTINGS,
-          ...parsedSettings,
-          ...perAccountTheme,
-          columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
-        };
-
-        setSettings(nextSettings);
-      } else {
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...perAccountTheme,
+      try {
+        const response = await fetch("/api/settings", {
+          cache: "no-store",
         });
+
+        if (!response.ok) {
+          throw new Error("Unable to load the company settings.");
+        }
+
+        const result = (await response.json()) as { settings?: unknown };
+        const cached = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+        const nextSettings = normalizeSettings(
+          result.settings ?? (cached ? JSON.parse(cached) : null),
+        );
+
+        if (mounted) {
+          setSettings(nextSettings);
+          window.localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(nextSettings),
+          );
+        }
+      } catch {
+        try {
+          const cached = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+          if (mounted) {
+            setSettings(normalizeSettings(cached ? JSON.parse(cached) : null));
+          }
+        } catch {
+          if (mounted) setSettings(DEFAULT_SETTINGS);
+        }
+      } finally {
+        if (mounted) setSettingsLoading(false);
       }
-    } catch {
-      setSettings({
-        ...DEFAULT_SETTINGS,
-        ...loadPerAccountTheme(currentUser.name),
-      });
     }
+
+    void loadSharedSettings();
+
+    return () => {
+      mounted = false;
+    };
   }, [currentUser]);
 
   useEffect(() => {
@@ -389,33 +374,54 @@ export default function SettingsPage() {
     setSaved(false);
   }
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+  async function saveSharedSettings(nextSettings: DashboardSettings) {
+    if (currentUser?.role !== "owner") return false;
+
+    setSaving(true);
+    setSaveError("");
+
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: nextSettings }),
+        cache: "no-store",
+      });
+
+      const result = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to save settings.");
+      }
+
+      window.localStorage.setItem(
+        SETTINGS_STORAGE_KEY,
+        JSON.stringify(nextSettings),
+      );
+      window.dispatchEvent(new Event("aec-settings-updated"));
+      setSaved(true);
+      return true;
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save settings. Please try again.",
+      );
+      setSaved(false);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!currentUser) return;
+    if (currentUser?.role !== "owner") return;
 
-    const normalizedSettings = {
-      ...settings,
-      columnOrder: normalizeColumnOrder(settings.columnOrder),
-    };
-
-    const sharedSettings: DashboardSettings = {
-      ...normalizedSettings,
-      ...DEFAULT_PER_ACCOUNT_THEME,
-    };
-
-    window.localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify(sharedSettings),
-    );
-    savePerAccountTheme(currentUser.name, {
-      appearance: normalizedSettings.appearance,
-      appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
-    });
+    const normalizedSettings = normalizeSettings(settings);
 
     setSettings(normalizedSettings);
-    window.dispatchEvent(new Event("aec-settings-updated"));
-    setSaved(true);
+    await saveSharedSettings(normalizedSettings);
   }
 
   function handleLogoUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -461,7 +467,7 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
-  function handleReset() {
+  async function handleReset() {
     const resettableDefaults: Pick<
       DashboardSettings,
       | "appearance"
@@ -483,26 +489,7 @@ export default function SettingsPage() {
     };
 
     setSettings(nextSettings);
-
-    if (currentUser) {
-      savePerAccountTheme(currentUser.name, {
-        appearance: nextSettings.appearance,
-        appearanceDefaultVersion:
-          DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
-      });
-    }
-
-    const sharedSettings: DashboardSettings = {
-      ...nextSettings,
-      ...DEFAULT_PER_ACCOUNT_THEME,
-    };
-
-    window.localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify(sharedSettings),
-    );
-    window.dispatchEvent(new Event("aec-settings-updated"));
-    setSaved(true);
+    await saveSharedSettings(normalizeSettings(nextSettings));
   }
 
   function moveColumn(column: JobColumnKey, direction: -1 | 1) {
@@ -560,20 +547,19 @@ export default function SettingsPage() {
   const inputStyle =
     "mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
 
-  if (authLoading || !currentUser) {
+  if (authLoading || settingsLoading || !currentUser) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500">
-        Checking login...
+        Loading settings...
       </main>
     );
   }
 
   if (currentUser.role !== "owner") {
     return (
-      <EmployeeThemeSettings
+      <ManagedSettingsNotice
         currentUser={currentUser}
         settings={settings}
-        setSettings={setSettings}
         darkModeIsActive={darkModeIsActive}
       />
     );
@@ -587,13 +573,13 @@ export default function SettingsPage() {
     >
       <ThemeStyles />
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-5 lg:px-8">
-          <div>
+        <div className="mx-auto flex max-w-[1200px] flex-col items-stretch gap-4 px-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5 lg:px-8">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
               {settings.companyName}
             </p>
 
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+            <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
               System Settings
             </h1>
           </div>
@@ -601,7 +587,7 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => router.push("/dashboard")}
-            className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 sm:w-auto"
           >
             <ArrowLeftIcon />
             Back to Dashboard
@@ -609,14 +595,14 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1200px] px-5 py-8 lg:px-8">
-        <div className="mb-6 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm">
+      <div className="mx-auto max-w-[1200px] px-3 py-5 sm:px-5 sm:py-8 lg:px-8">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm sm:h-12 sm:w-12 sm:rounded-2xl">
             <SettingsIcon />
           </div>
 
           <div>
-            <h2 className="text-xl font-semibold text-slate-950">
+            <h2 className="text-lg font-semibold text-slate-950 sm:text-xl">
               Dashboard Preferences
             </h2>
 
@@ -631,14 +617,14 @@ export default function SettingsPage() {
           className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]"
         >
           <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-6">
-            <nav className="p-3" aria-label="Settings categories">
+            <nav className="grid grid-cols-2 gap-1 p-2 sm:p-3 lg:block" aria-label="Settings categories">
               <button
                 type="button"
                 onClick={() => setActiveCategory("organization")}
                 aria-current={
                   activeCategory === "organization" ? "page" : undefined
                 }
-                className={`flex w-full items-center gap-3 rounded-xl px-4 py-4 text-left text-sm font-semibold transition ${
+                className={`flex w-full flex-col items-center gap-2 rounded-xl px-2 py-3 text-center text-xs font-semibold transition sm:flex-row sm:gap-3 sm:px-4 sm:py-4 sm:text-left sm:text-sm ${
                   activeCategory === "organization"
                     ? "bg-blue-50 text-blue-700"
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
@@ -662,7 +648,7 @@ export default function SettingsPage() {
                 aria-current={
                   activeCategory === "job-dashboard" ? "page" : undefined
                 }
-                className={`mt-1 flex w-full items-center gap-3 rounded-xl px-4 py-4 text-left text-sm font-semibold transition ${
+                className={`flex w-full flex-col items-center gap-2 rounded-xl px-2 py-3 text-center text-xs font-semibold transition sm:flex-row sm:gap-3 sm:px-4 sm:py-4 sm:text-left sm:text-sm lg:mt-1 ${
                   activeCategory === "job-dashboard"
                     ? "bg-blue-50 text-blue-700"
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
@@ -698,7 +684,7 @@ export default function SettingsPage() {
 
             {activeCategory === "organization" && (
               <>
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
                       Branding
@@ -764,7 +750,7 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
                       Company Information
@@ -816,7 +802,7 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
                       Administrator Profile
@@ -875,7 +861,7 @@ export default function SettingsPage() {
 
             {activeCategory === "job-dashboard" && (
               <>
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
                       Appearance
@@ -931,7 +917,7 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
                       Job Information Sheet Column Order
@@ -1002,7 +988,7 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <div className="border-b border-slate-100 pb-4">
                     <h3 className="text-base font-semibold text-slate-900">
                       Dashboard Display
@@ -1050,7 +1036,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
                 >
                   Reset Default
                 </button>
@@ -1059,22 +1045,29 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => router.push("/dashboard")}
-                className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
               >
                 Back to Dashboard
               </button>
 
               <button
                 type="submit"
-                className="h-11 rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-blue-700"
+                disabled={saving}
+                className="h-11 w-full rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
-                Save Settings
+                {saving ? "Saving..." : "Save Settings"}
               </button>
             </div>
 
             {saved && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
                 Settings saved successfully.
+              </div>
+            )}
+
+            {saveError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                {saveError}
               </div>
             )}
           </div>
@@ -1084,35 +1077,16 @@ export default function SettingsPage() {
   );
 }
 
-function EmployeeThemeSettings({
+function ManagedSettingsNotice({
   currentUser,
   settings,
-  setSettings,
   darkModeIsActive,
 }: {
   currentUser: CurrentUser;
   settings: DashboardSettings;
-  setSettings: Dispatch<SetStateAction<DashboardSettings>>;
   darkModeIsActive: boolean;
 }) {
   const router = useRouter();
-  const [saved, setSaved] = useState(false);
-
-  function saveTheme() {
-    const nextPreferences: PerAccountTheme = {
-      appearance: settings.appearance,
-      appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
-    };
-
-    savePerAccountTheme(currentUser.name, nextPreferences);
-    setSettings((current) => ({
-      ...current,
-      ...nextPreferences,
-    }));
-    window.dispatchEvent(new Event("aec-settings-updated"));
-    setSaved(true);
-  }
 
   return (
     <main
@@ -1123,23 +1097,23 @@ function EmployeeThemeSettings({
       <ThemeStyles />
 
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5 lg:px-8">
-          <div>
+        <div className="mx-auto flex max-w-3xl flex-col items-stretch gap-4 px-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5 lg:px-8">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
               {settings.companyName}
             </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-              Appearance Settings
+            <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
+              System Settings
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Signed in as {currentUser.name} · Theme access only
+              Signed in as {currentUser.name}
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => router.push("/dashboard")}
-            className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 sm:w-auto"
           >
             <ArrowLeftIcon />
             Back
@@ -1147,80 +1121,37 @@ function EmployeeThemeSettings({
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-5 py-8 lg:px-8">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mx-auto max-w-3xl px-3 py-5 sm:px-5 sm:py-8 lg:px-8">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="border-b border-slate-100 pb-4">
-            <h2 className="text-base font-semibold text-slate-900">Theme</h2>
+            <h2 className="text-base font-semibold text-slate-900">
+              Settings managed by owner
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Employees can change the Theme only. Branding, company
-              information, columns and dashboard controls are owner-only.
+              Company information, Branding, Theme, Language, System and
+              Dashboard preferences are shared with every account. Only the
+              owner can change them.
             </p>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <AppearanceOption
-              value="light"
-              title="Light Mode"
-              description="Default white and blue interface"
-              selected={settings.appearance === "light"}
-              onSelect={(value) => {
-                setSettings((current) => ({
-                  ...current,
-                  appearance: value,
-                }));
-                setSaved(false);
-              }}
-            />
-            <AppearanceOption
-              value="dark"
-              title="Dark Mode"
-              description="Black-blue interface with light text"
-              selected={settings.appearance === "dark"}
-              onSelect={(value) => {
-                setSettings((current) => ({
-                  ...current,
-                  appearance: value,
-                }));
-                setSaved(false);
-              }}
-            />
-            <AppearanceOption
-              value="system"
-              title="System"
-              description="Follow Chrome or device"
-              selected={settings.appearance === "system"}
-              onSelect={(value) => {
-                setSettings((current) => ({
-                  ...current,
-                  appearance: value,
-                }));
-                setSaved(false);
-              }}
-            />
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+            <p className="text-sm font-semibold text-blue-900">
+              Current company Theme
+            </p>
+            <p className="mt-1 text-sm capitalize text-blue-700">
+              {settings.appearance} mode
+            </p>
           </div>
 
-          <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <div className="mt-6 flex">
             <button
               type="button"
               onClick={() => router.push("/dashboard")}
-              className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 sm:ml-auto sm:w-auto"
             >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={saveTheme}
-              className="h-11 rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              Save Theme
+              Back to Dashboard
             </button>
           </div>
-
-          {saved && (
-            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-              Theme saved successfully.
-            </div>
-          )}
         </section>
       </div>
     </main>

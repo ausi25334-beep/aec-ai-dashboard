@@ -90,22 +90,22 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-5 py-10">
+    <main className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-3 py-6 sm:min-h-screen sm:px-5 sm:py-10">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-[-8rem] top-[-8rem] h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
         <div className="absolute bottom-[-10rem] right-[-5rem] h-96 w-96 rounded-full bg-cyan-500/15 blur-3xl" />
       </div>
 
-      <section className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-white p-8 shadow-2xl sm:p-10">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-lg shadow-blue-600/25">
-          AEC
+      <section className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-white p-5 shadow-2xl sm:rounded-3xl sm:p-10">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white shadow-lg shadow-blue-600/25 sm:h-14 sm:w-14 sm:rounded-2xl sm:text-xl">
+          A
         </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">
+        <div className="mt-5 text-center sm:mt-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-600 sm:text-xs sm:tracking-[0.22em]">
             AEC Company
           </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+          <h1 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
             Welcome Back
           </h1>
           <p className="mt-2 text-sm text-slate-500">
@@ -113,7 +113,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4 sm:mt-8 sm:space-y-5">
           <div>
             <label
               htmlFor="name"

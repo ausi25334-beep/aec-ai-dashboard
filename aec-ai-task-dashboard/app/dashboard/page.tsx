@@ -397,47 +397,24 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
-const USER_SETTINGS_STORAGE_PREFIX = "aec-dashboard-user-settings:";
 
-type PerAccountTheme = Pick<
-  DashboardSettings,
-  "appearance" | "appearanceDefaultVersion"
->;
+function normalizeSettings(value: unknown): DashboardSettings {
+  const saved =
+    value && typeof value === "object"
+      ? (value as Partial<DashboardSettings>)
+      : {};
 
-const DEFAULT_PER_ACCOUNT_THEME: PerAccountTheme = {
-  appearance: DEFAULT_SETTINGS.appearance,
-  appearanceDefaultVersion: DEFAULT_SETTINGS.appearanceDefaultVersion,
-};
-
-function getUserSettingsStorageKey(name: string) {
-  return `${USER_SETTINGS_STORAGE_PREFIX}${encodeURIComponent(
-    name.trim().toLowerCase(),
-  )}`;
-}
-
-function loadPerAccountTheme(name: string): PerAccountTheme {
-  try {
-    const storedValue = window.localStorage.getItem(
-      getUserSettingsStorageKey(name),
-    );
-
-    if (!storedValue) return DEFAULT_PER_ACCOUNT_THEME;
-
-    const parsedValue = JSON.parse(storedValue) as Partial<PerAccountTheme>;
-
-    return {
-      appearance:
-        parsedValue.appearance === "dark" ||
-        parsedValue.appearance === "system" ||
-        parsedValue.appearance === "light"
-          ? parsedValue.appearance
-          : DEFAULT_PER_ACCOUNT_THEME.appearance,
-      appearanceDefaultVersion:
-        DEFAULT_PER_ACCOUNT_THEME.appearanceDefaultVersion,
-    };
-  } catch {
-    return DEFAULT_PER_ACCOUNT_THEME;
-  }
+  return {
+    ...DEFAULT_SETTINGS,
+    ...saved,
+    appearance:
+      saved.appearance === "dark" ||
+      saved.appearance === "system" ||
+      saved.appearance === "light"
+        ? saved.appearance
+        : DEFAULT_SETTINGS.appearance,
+    columnOrder: normalizeColumnOrder(saved.columnOrder),
+  };
 }
 
 /* =========================================================
@@ -599,7 +576,7 @@ function JobDataTable({
 }) {
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">
             Job Information Sheet
@@ -1393,54 +1370,64 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!currentUserName) return;
 
-    function loadSettings() {
+    let mounted = true;
+
+    function loadCachedSettings() {
       try {
         const savedSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        const perAccountTheme = loadPerAccountTheme(currentUserName);
+        setSettings(
+          normalizeSettings(savedSettings ? JSON.parse(savedSettings) : null),
+        );
+      } catch {
+        setSettings(DEFAULT_SETTINGS);
+      }
+    }
 
-        if (savedSettings) {
-          const parsedSettings = JSON.parse(
-            savedSettings,
-          ) as Partial<DashboardSettings>;
+    async function loadSharedSettings() {
+      try {
+        const response = await fetch("/api/settings", {
+          cache: "no-store",
+        });
 
-          const nextSettings: DashboardSettings = {
-            ...DEFAULT_SETTINGS,
-            ...parsedSettings,
-            ...perAccountTheme,
-            columnOrder: normalizeColumnOrder(parsedSettings.columnOrder),
-          };
+        if (!response.ok) {
+          throw new Error("Unable to load shared settings.");
+        }
 
+        const result = (await response.json()) as { settings?: unknown };
+        const cached = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+        const nextSettings = normalizeSettings(
+          result.settings ?? (cached ? JSON.parse(cached) : null),
+        );
+
+        if (mounted) {
           setSettings(nextSettings);
-        } else {
-          setSettings({
-            ...DEFAULT_SETTINGS,
-            ...perAccountTheme,
-          });
+          window.localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(nextSettings),
+          );
         }
       } catch {
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...loadPerAccountTheme(currentUserName),
-        });
+        if (mounted) loadCachedSettings();
       }
     }
 
     function handleStorage(event: StorageEvent) {
-      if (
-        event.key === SETTINGS_STORAGE_KEY ||
-        event.key === getUserSettingsStorageKey(currentUserName)
-      ) {
-        loadSettings();
-      }
+      if (event.key === SETTINGS_STORAGE_KEY) loadCachedSettings();
     }
 
-    loadSettings();
+    loadCachedSettings();
+    void loadSharedSettings();
     window.addEventListener("storage", handleStorage);
-    window.addEventListener("aec-settings-updated", loadSettings);
+    window.addEventListener("aec-settings-updated", loadCachedSettings);
+    window.addEventListener("focus", loadSharedSettings);
+    window.addEventListener("pageshow", loadSharedSettings);
 
     return () => {
+      mounted = false;
       window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("aec-settings-updated", loadSettings);
+      window.removeEventListener("aec-settings-updated", loadCachedSettings);
+      window.removeEventListener("focus", loadSharedSettings);
+      window.removeEventListener("pageshow", loadSharedSettings);
     };
   }, [currentUserName]);
 
@@ -1670,9 +1657,9 @@ export default function DashboardPage() {
       {/* Header */}
 
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1900px] items-center justify-between px-5 py-5 lg:px-8">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="mx-auto flex max-w-[1900px] flex-col items-stretch gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-sm sm:h-16 sm:w-16 sm:rounded-2xl">
               <img
                 src={settings.logoDataUrl || DEFAULT_LOGO_DATA_URL}
                 alt={`${settings.companyName} logo`}
@@ -1681,17 +1668,17 @@ export default function DashboardPage() {
             </div>
 
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.15em] text-blue-600 sm:text-xs sm:tracking-[0.2em]">
                 {settings.companyName}
               </p>
 
-              <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-slate-950">
+              <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-slate-950 sm:text-2xl">
                 {settings.dashboardTitle}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end gap-2 sm:gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-slate-800">
                 {settings.administratorName}
@@ -1716,7 +1703,7 @@ export default function DashboardPage() {
               type="button"
               onClick={handleSignOut}
               disabled={signingOut}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
             >
               {signingOut ? "Signing Out..." : "Sign Out"}
             </button>
@@ -1724,7 +1711,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1900px] px-5 py-7 lg:px-8">
+      <div className="mx-auto max-w-[1900px] px-3 py-4 sm:px-5 sm:py-7 lg:px-8">
         {dataIsLoading && (
           <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-medium text-blue-700 shadow-sm">
             Loading Job and Staff data from Supabase...
@@ -1782,7 +1769,7 @@ export default function DashboardPage() {
         {/* Automatic Job Calendar */}
 
         <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5">
             <div>
               <h2 className="text-lg font-semibold text-slate-950">
                 Job Calendar
@@ -1793,7 +1780,7 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={goToCurrentMonth}
@@ -1811,7 +1798,7 @@ export default function DashboardPage() {
                 <ChevronLeftIcon />
               </button>
 
-              <div className="min-w-[150px] text-center">
+              <div className="min-w-[130px] flex-1 text-center sm:min-w-[150px] sm:flex-none">
                 <p className="text-sm font-semibold text-slate-800">
                   {calendarDate.toLocaleDateString("en-MY", {
                     month: "long",
@@ -1831,8 +1818,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto p-4">
-            <div className="min-w-[1000px]">
+          <div className="overflow-x-auto p-3 sm:p-4">
+            <div className="min-w-[760px] sm:min-w-[1000px]">
               <div className="grid grid-cols-7">
                 {SHORT_WEEK_DAYS.map((day) => (
                   <div
@@ -1855,7 +1842,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={calendarDay.dateKey}
-                      className={`min-h-[145px] rounded-xl border p-2 ${
+                      className={`min-h-[120px] rounded-xl border p-2 sm:min-h-[145px] ${
                         calendarDay.isCurrentMonth
                           ? "border-slate-200 bg-white"
                           : "border-slate-100 bg-slate-50/70"
@@ -1950,12 +1937,12 @@ export default function DashboardPage() {
             </div>
 
             {settings.showStageLegend && (
-              <div className="w-fit max-w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm xl:ml-auto">
-                <p className="text-right text-xs font-semibold text-slate-500">
+              <div className="w-full max-w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:w-fit">
+                <p className="text-left text-xs font-semibold text-slate-500 xl:text-right">
                   Stage Legend
                 </p>
 
-                <div className="mt-2 flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+                <div className="mt-2 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 xl:justify-end">
                   {JOB_STATUSES.map((status) => (
                     <div key={status} className="flex items-center gap-2">
                       <span
@@ -1993,7 +1980,7 @@ export default function DashboardPage() {
                   </div>
                 ))}
 
-                <div className="ml-auto flex items-center gap-2 border-l border-slate-200 pl-4">
+                <div className="flex w-full items-center justify-end gap-2 border-t border-slate-200 pt-3 sm:ml-auto sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
                   <span className="text-sm font-semibold text-slate-700">
                     Total:
                   </span>
@@ -2019,7 +2006,7 @@ export default function DashboardPage() {
                   key={status}
                   className={`overflow-hidden rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm ${styles.leftBorder}`}
                 >
-                  <div className="flex min-h-[72px] items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4">
+                  <div className="flex min-h-[72px] flex-col items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
                     <div className="flex items-center gap-3">
                       <div
                         className={`flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm ${styles.iconBackground}`}
@@ -2045,14 +2032,14 @@ export default function DashboardPage() {
                     </div>
 
                     <span
-                      className={`rounded-full px-4 py-1.5 text-xs font-semibold ${styles.badge}`}
+                      className={`self-end rounded-full px-4 py-1.5 text-xs font-semibold sm:self-auto ${styles.badge}`}
                     >
                       {statusJobs.length}{" "}
                       {statusJobs.length === 1 ? "job" : "jobs"}
                     </span>
                   </div>
 
-                  <div className="p-4">
+                  <div className="p-3 sm:p-4">
                     {statusJobs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                         {statusJobs.map((job) => (
@@ -2060,7 +2047,7 @@ export default function DashboardPage() {
                             type="button"
                             key={job.jobId}
                             onClick={() => openJobDetails(job)}
-                            className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                            className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:p-4"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="truncate text-xs font-semibold text-blue-600">
@@ -2303,7 +2290,7 @@ function ReadOnlyJobModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -2312,9 +2299,9 @@ function ReadOnlyJobModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="job-details-title"
-        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        className="flex max-h-[96dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[94vh] sm:rounded-3xl"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:gap-4 sm:px-7 sm:py-5">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
               Job Details
@@ -2340,7 +2327,7 @@ function ReadOnlyJobModal({
           </button>
         </div>
 
-        <div className="space-y-5 overflow-y-auto px-5 py-5 sm:px-7">
+        <div className="space-y-4 overflow-y-auto px-4 py-4 sm:space-y-5 sm:px-7 sm:py-5">
           {renderSection(
             "Job Information",
             "Customer, sales and incoming job information.",
@@ -2355,11 +2342,11 @@ function ReadOnlyJobModal({
 
         </div>
 
-        <div className="flex justify-end border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
+        <div className="flex justify-end border-t border-slate-200 bg-white px-4 py-3 sm:px-7 sm:py-4">
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20"
+            className="h-11 w-full rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 sm:w-auto"
           >
             Close
           </button>
@@ -2485,7 +2472,7 @@ function DashboardThemeStyles() {
 function StaffDirectory({ staff }: { staff: Staff[] }) {
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 sm:px-5 sm:py-5 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
@@ -2509,7 +2496,7 @@ function StaffDirectory({ staff }: { staff: Staff[] }) {
         </span>
       </div>
 
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div className="min-w-0">
           {staff.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
@@ -2607,7 +2594,7 @@ function StatisticCard({
         style={{ backgroundColor: hex }}
       />
 
-      <div className="flex min-h-[112px] items-center justify-between gap-4 p-5 pl-6">
+      <div className="flex min-h-[100px] items-center justify-between gap-3 p-4 pl-5 sm:min-h-[112px] sm:gap-4 sm:p-5 sm:pl-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span
@@ -2620,7 +2607,7 @@ function StatisticCard({
             </p>
           </div>
 
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:mt-3 sm:text-3xl">
             {value}
           </p>
         </div>
@@ -2696,7 +2683,7 @@ function WeeklyOrderChart({
   ).reverse();
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div>
         <h2 className="text-lg font-semibold text-slate-950">
           Weekly Order Trend
@@ -2825,7 +2812,7 @@ function JobStatusChart({
       : "#e2e8f0";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div>
         <h2 className="text-lg font-semibold text-slate-950">
           Job Status Distribution
@@ -2834,9 +2821,9 @@ function JobStatusChart({
         <p className="mt-1 text-sm text-slate-500">Current status breakdown</p>
       </div>
 
-      <div className="mt-7 flex min-h-[320px] flex-col items-center justify-center gap-7 lg:flex-row">
+      <div className="mt-6 flex min-h-[280px] flex-col items-center justify-center gap-6 sm:mt-7 sm:min-h-[320px] sm:gap-7 lg:flex-row">
         <div
-          className="relative h-52 w-52 shrink-0 rounded-full"
+          className="relative h-44 w-44 shrink-0 rounded-full sm:h-52 sm:w-52"
           style={{ background: donutBackground }}
         >
           <div className="absolute inset-9 flex flex-col items-center justify-center rounded-full bg-white shadow-inner">
