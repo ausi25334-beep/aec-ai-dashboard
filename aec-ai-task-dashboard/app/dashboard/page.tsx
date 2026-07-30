@@ -124,6 +124,31 @@ const JOB_COLUMN_KEYS = [
 
 type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
 
+/*
+  These are the only columns users can display and arrange.
+  The three legacy phone fields stay in the internal Job type so older
+  Supabase rows remain compatible, but they are not exposed in the
+  Dashboard table, Job Details, defaults, or Settings.
+*/
+const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
+  "jobId",
+  "jobInDateTime",
+  "customerStatus",
+  "status",
+  "customerCompanyName",
+  "customerName",
+  "description",
+  "statusRemark",
+  "reportNo",
+  "collectionDateTime",
+  "assignedTechnician",
+  "jobCompleteDateTime",
+  "invoiceNo",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "salesPerson",
+];
+
 const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobId: "Job ID",
   jobInDateTime: "Job In Date & Time",
@@ -133,7 +158,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   customerName: "Customer Name",
   customerPhone: "Customer Phone",
   customerCompanyName: "Customer Company Name",
-  assignedTechnician: "Assigned Technician",
+  assignedTechnician: "Assigned Engineer",
   technicianPhone: "Technician Phone",
   description: "Description / Item",
   status: "Status",
@@ -146,7 +171,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   collectionDateTime: "Collection Date & Time",
 };
 
-const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
+const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...DISPLAY_JOB_COLUMN_KEYS];
 
 const HIDDEN_JOB_PHONE_COLUMNS = new Set<JobColumnKey>([
   "customerPhone",
@@ -155,7 +180,7 @@ const HIDDEN_JOB_PHONE_COLUMNS = new Set<JobColumnKey>([
 ]);
 
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
-  const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
+  const validKeys = new Set<JobColumnKey>(DISPLAY_JOB_COLUMN_KEYS);
   const savedKeys = Array.isArray(value)
     ? value.filter(
         (key): key is JobColumnKey =>
@@ -166,7 +191,7 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
 
   return [
     ...uniqueSavedKeys,
-    ...JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
+    ...DISPLAY_JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
   ];
 }
 
@@ -215,6 +240,9 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "Customer Company Name",
   ],
   assignedTechnician: [
+    "assigned_engineer",
+    "assignedEngineer",
+    "Assigned Engineer",
     "assigned_technician",
     "assignedTechnician",
     "Assigned Technician",
@@ -343,6 +371,9 @@ function mapJobRow(row: SupabaseRow): Job {
       "Customer Company Name",
     ]),
     assignedTechnician: readText(row, [
+      "assigned_engineer",
+      "assignedEngineer",
+      "Assigned Engineer",
       "assigned_technician",
       "assignedTechnician",
       "Assigned Technician",
@@ -2313,7 +2344,7 @@ export default function DashboardPage() {
 
                               {job.assignedTechnician && (
                                 <p className="mt-2 truncate text-xs font-medium text-slate-600">
-                                  Technician: {job.assignedTechnician}
+                                  Engineer: {job.assignedTechnician}
                                 </p>
                               )}
 
@@ -2591,7 +2622,7 @@ function ReadOnlyJobModal({
 
           {renderSection(
             "Job Progress Details",
-            "Technician, workflow status, dates and supporting references.",
+            "Engineer, workflow status, dates and supporting references.",
             JOB_PROGRESS_FIELDS,
           )}
 
