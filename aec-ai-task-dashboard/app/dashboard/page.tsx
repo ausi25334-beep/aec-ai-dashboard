@@ -12,8 +12,8 @@ import { createClient } from "@supabase/supabase-js";
 ========================================================= */
 
 const JOB_STATUSES = [
-  "New Job",
-  "Pending Job",
+  "New Jobs",
+  "Pending Jobs",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -21,24 +21,25 @@ const JOB_STATUSES = [
   "Complete",
 ] as const;
 
-type JobStatus = (typeof JOB_STATUSES)[number];
+type BoardJobStatus = (typeof JOB_STATUSES)[number];
+type JobStatus = BoardJobStatus | "In Progress";
 
-const TOP_STATUSES: readonly JobStatus[] = [
-  "New Job",
-  "Pending Job",
+const TOP_STATUSES: readonly BoardJobStatus[] = [
+  "New Jobs",
+  "Pending Jobs",
   "Complete",
 ];
 
-const SECOND_ROW_STATUSES: readonly JobStatus[] = [
+const SECOND_ROW_STATUSES: readonly BoardJobStatus[] = [
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
   "Pending Invoice",
 ];
 
-const DISTRIBUTION_STATUSES: readonly JobStatus[] = [
-  "New Job",
-  "Pending Job",
+const DISTRIBUTION_STATUSES: readonly BoardJobStatus[] = [
+  "New Jobs",
+  "Pending Jobs",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -48,7 +49,7 @@ const DISTRIBUTION_STATUSES: readonly JobStatus[] = [
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, "Full"] as const;
 type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 type BoardPaginationState = Record<
-  JobStatus,
+  BoardJobStatus,
   { page: number; pageSize: PageSize }
 >;
 
@@ -318,10 +319,11 @@ function normalizeDateTime(value: string) {
 function normalizeJobStatus(value: string): JobStatus {
   const normalized = value.trim().toLowerCase();
   const aliases: Record<string, JobStatus> = {
-    "new job": "New Job",
-    "new jobs": "New Job",
-    "pending job": "Pending Job",
-    "pending jobs": "Pending Job",
+    "new job": "New Jobs",
+    "new jobs": "New Jobs",
+    "pending job": "Pending Jobs",
+    "pending jobs": "Pending Jobs",
+    "in progress": "In Progress",
     "claim warranty": "Claim Warranty",
     "pending invoice": "Pending Invoice",
     "pending parts": "Pending Parts",
@@ -332,7 +334,7 @@ function normalizeJobStatus(value: string): JobStatus {
     completed: "Complete",
   };
 
-  return aliases[normalized] || "New Job";
+  return aliases[normalized] || "New Jobs";
 }
 
 function mapJobRow(row: SupabaseRow): Job {
@@ -604,7 +606,7 @@ function StatusIcon({
     "aria-hidden": true,
   };
 
-  if (status === "New Job") {
+  if (status === "New Jobs") {
     return (
       <svg {...commonProps}>
         <rect x="3" y="7" width="18" height="13" rx="2" />
@@ -615,7 +617,7 @@ function StatusIcon({
     );
   }
 
-  if (status === "Pending Job") {
+  if (status === "Pending Jobs" || status === "In Progress") {
     return (
       <svg {...commonProps}>
         <circle cx="12" cy="12" r="9" />
@@ -735,8 +737,12 @@ function JobDataTable({
                 return (
                   <tr
                     key={job.jobId}
-                    className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${
-                      index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                    className={`border-b transition ${
+                      job.status === "Complete"
+                        ? "border-emerald-300 bg-emerald-100 font-medium ring-1 ring-inset ring-emerald-300 hover:bg-emerald-200/80"
+                        : `border-slate-100 hover:bg-blue-50/40 ${
+                            index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                          }`
                     }`}
                   >
                     {visibleColumns.map((column) => (
@@ -986,7 +992,7 @@ const statusStyles: Record<
     hex: string;
   }
 > = {
-  "New Job": {
+  "New Jobs": {
     dot: "bg-blue-500",
     badge: "bg-blue-50 text-blue-700",
     numberBadge: "bg-blue-500 text-white",
@@ -999,17 +1005,31 @@ const statusStyles: Record<
       "border border-blue-500 bg-blue-100 text-blue-800 shadow-sm ring-1 ring-blue-200",
     hex: "#3b82f6",
   },
-  "Pending Job": {
-    dot: "bg-rose-500",
-    badge: "bg-rose-50 text-rose-700",
-    numberBadge: "bg-rose-500 text-white",
-    leftBorder: "border-l-rose-500",
-    iconBackground: "bg-rose-500",
-    selectFocus: "focus:border-rose-500 focus:ring-rose-500/10",
-    calendar: "border-rose-300 bg-rose-100 text-rose-800",
+  "Pending Jobs": {
+    dot: "bg-teal-500",
+    badge: "bg-teal-50 text-teal-700",
+    numberBadge: "bg-teal-500 text-white",
+    leftBorder: "border-l-teal-500",
+    iconBackground: "bg-teal-500",
+    selectFocus: "focus:border-teal-500 focus:ring-teal-500/10",
+    calendar:
+      "border-teal-700 bg-teal-600 text-white shadow-sm ring-1 ring-teal-500/30",
     customerBadge:
-      "border border-rose-500 bg-rose-100 text-rose-800 shadow-sm ring-1 ring-rose-200",
-    hex: "#f43f5e",
+      "border border-teal-500 bg-teal-100 text-teal-800 shadow-sm ring-1 ring-teal-200",
+    hex: "#14b8a6",
+  },
+  "In Progress": {
+    dot: "bg-violet-500",
+    badge: "bg-violet-50 text-violet-700",
+    numberBadge: "bg-violet-500 text-white",
+    leftBorder: "border-l-violet-500",
+    iconBackground: "bg-violet-500",
+    selectFocus: "focus:border-violet-500 focus:ring-violet-500/10",
+    calendar:
+      "border-violet-700 bg-violet-600 text-white shadow-sm ring-1 ring-violet-500/30",
+    customerBadge:
+      "border border-violet-500 bg-violet-100 text-violet-800 shadow-sm ring-1 ring-violet-200",
+    hex: "#8b5cf6",
   },
   "Claim Warranty": {
     dot: "bg-violet-500",
@@ -1088,8 +1108,9 @@ function getCustomerStatusStyle(customerStatus?: string) {
 }
 
 const displayLabels: Record<JobStatus, string> = {
-  "New Job": "New Job",
-  "Pending Job": "Pending Job",
+  "New Jobs": "New Jobs",
+  "Pending Jobs": "Pending Jobs",
+  "In Progress": "In Progress",
   "Claim Warranty": "Claim Warranty",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
@@ -1097,9 +1118,9 @@ const displayLabels: Record<JobStatus, string> = {
   Complete: "Completed",
 };
 
-const statisticLabels: Record<JobStatus, string> = {
-  "New Job": "New Jobs",
-  "Pending Job": "Pending Jobs",
+const statisticLabels: Record<BoardJobStatus, string> = {
+  "New Jobs": "New Jobs",
+  "Pending Jobs": "Pending Jobs",
   "Claim Warranty": "Claim Warranty",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
@@ -1107,14 +1128,19 @@ const statisticLabels: Record<JobStatus, string> = {
   Complete: "Completed",
 };
 
-const distributionLabels: Record<JobStatus, string> = {
-  ...displayLabels,
-  "Pending Job": "Pending Jobs",
+const distributionLabels: Record<BoardJobStatus, string> = {
+  "New Jobs": "New Jobs",
+  "Pending Jobs": "Pending Jobs",
+  "Claim Warranty": "Claim Warranty",
+  "Pending Parts": "Pending Parts",
+  "Pending Quotation": "Pending Quotation",
+  "Pending Invoice": "Pending Invoice",
+  Complete: "Completed",
 };
 
-const statusDescriptions: Record<JobStatus, string> = {
-  "New Job": "Newly created jobs",
-  "Pending Job": "Jobs waiting for the next action",
+const statusDescriptions: Record<BoardJobStatus, string> = {
+  "New Jobs": "Newly created jobs",
+  "Pending Jobs": "Jobs waiting for the next action",
   "Claim Warranty": "Jobs under warranty claim",
   "Pending Parts": "Waiting for required parts",
   "Pending Quotation": "Waiting for quotation approval",
@@ -1359,20 +1385,10 @@ function parseDateTime(value?: string) {
 
 function isJobScheduledOnDate(job: Job, dateKey: string) {
   /*
-    Calendar appointments are valid only when BOTH In Progress
-    Start and End Date & Time have been filled in.
+    The Calendar is positioned by In Progress Start Date & Time.
+    The End value is not required for a job to appear.
   */
-  const startDateTime = parseDateTime(job.inProgressStartDateTime);
-  const endDateTime = parseDateTime(job.inProgressEndDateTime);
-
-  if (!startDateTime || !endDateTime || endDateTime < startDateTime) {
-    return false;
-  }
-
-  const startDateKey = formatDateKey(startDateTime);
-  const endDateKey = formatDateKey(endDateTime);
-
-  return dateKey >= startDateKey && dateKey <= endDateKey;
+  return getJobDateKey(job.inProgressStartDateTime) === dateKey;
 }
 
 function formatDisplayDateTime(value?: string) {
@@ -1817,7 +1833,7 @@ export default function DashboardPage() {
 
         return counts;
       },
-      {} as Record<JobStatus, number>,
+      {} as Record<BoardJobStatus, number>,
     );
   }, [jobs]);
 
@@ -2118,31 +2134,21 @@ export default function DashboardPage() {
                             type="button"
                             key={`${job.jobId}-${calendarDay.dateKey}`}
                             onClick={() => openJobDetails(job)}
-                            title={`${job.jobId} - ${job.customerName} - ${
-                              job.description
-                            } | ${formatInProgressPeriod(
-                              job.inProgressStartDateTime,
-                              job.inProgressEndDateTime,
-                            )}`}
-                            className={`block w-full rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
+                            title={`Job ID: ${job.jobId || "-"} | Customer Company Name: ${
+                              job.customerCompanyName || "-"
+                            } | Description: ${job.description || "-"}`}
+                            className={`block w-full rounded-lg border px-2 py-2 text-left text-[11px] font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
                           >
-                            <span className="flex min-w-0 items-center gap-1.5">
-                              <span
-                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-none ${getCustomerStatusStyle(
-                                  job.customerStatus,
-                                )}`}
-                              >
-                                {job.customerStatus || "Customer"}
-                              </span>
-
-                              <span className="truncate">
-                                {displayLabels[job.status]}
-                              </span>
+                            <span className="block truncate font-bold">
+                              Job ID: {job.jobId || "-"}
                             </span>
 
                             <span className="mt-1 block truncate font-medium">
-                              {job.customerName}
-                              {job.description ? ` - ${job.description}` : ""}
+                              Company: {job.customerCompanyName || "-"}
+                            </span>
+
+                            <span className="mt-1 block truncate font-medium">
+                              Description: {job.description || "-"}
                             </span>
                           </button>
                         ))}
@@ -3102,7 +3108,7 @@ function WeeklyJobChart({
 function JobStatusChart({
   statusCounts,
 }: {
-  statusCounts: Record<JobStatus, number>;
+  statusCounts: Record<BoardJobStatus, number>;
 }) {
   const totalJobs = DISTRIBUTION_STATUSES.reduce(
     (total, status) => total + statusCounts[status],
