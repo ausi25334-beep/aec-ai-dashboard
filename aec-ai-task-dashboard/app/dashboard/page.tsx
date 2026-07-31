@@ -697,10 +697,11 @@ function JobDataTable({
   const visibleColumns = columnOrder.filter(
     (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
   );
-  const sortedJobs = useMemo(
-    () => [...jobs].sort(compareJobsByNewest),
-    [jobs],
-  );
+  /*
+    DashboardPage passes the shared orderedJobs array here. Keeping that exact
+    order makes the Job Information Sheet and every Job Progress Board agree.
+  */
+  const sortedJobs = jobs;
   const totalPages =
     pageSize === "Full"
       ? 1
@@ -1453,6 +1454,16 @@ function compareJobsByNewest(a: Job, b: Job) {
   });
 }
 
+function getCalendarCompanyFontSize(companyName?: string) {
+  const length = Array.from(companyName?.trim() || "").length;
+
+  if (length > 48) return "7.5pt";
+  if (length > 36) return "8pt";
+  if (length > 26) return "9pt";
+
+  return "10pt";
+}
+
 function isJobScheduledOnDate(job: Job, dateKey: string) {
   /*
     The Calendar is positioned by In Progress Start Date & Time.
@@ -1896,6 +1907,15 @@ export default function DashboardPage() {
     };
   }, []);
 
+  /*
+    Shared order for the information sheet and all seven progress boards:
+    Job In Date & Time descending, then Job ID descending.
+  */
+  const orderedJobs = useMemo(
+    () => [...jobs].sort(compareJobsByNewest),
+    [jobs],
+  );
+
   const statusCounts = useMemo(() => {
     return JOB_STATUSES.reduce(
       (counts, status) => {
@@ -2210,10 +2230,19 @@ export default function DashboardPage() {
                             aria-label={`Open job ${job.jobId || "-"} for ${
                               job.customerCompanyName || "-"
                             }`}
-                            className={`block w-full rounded-lg border px-2 py-1.5 text-left text-[10pt] font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
+                            className={`block w-full rounded-lg border px-2 py-1.5 text-left font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
                           >
-                            <span className="block truncate">
-                              {job.jobId || "-"}{" "}
+                            <span className="block text-[10pt] leading-tight">
+                              {job.jobId || "-"}
+                            </span>
+                            <span
+                              className="mt-0.5 block whitespace-normal break-words leading-[1.15] [overflow-wrap:anywhere]"
+                              style={{
+                                fontSize: getCalendarCompanyFontSize(
+                                  job.customerCompanyName,
+                                ),
+                              }}
+                            >
                               {job.customerCompanyName || "-"}
                             </span>
                           </button>
@@ -2229,7 +2258,7 @@ export default function DashboardPage() {
 
         {/* Job Information Sheet */}
 
-        <JobDataTable jobs={jobs} columnOrder={settings.columnOrder} />
+        <JobDataTable jobs={orderedJobs} columnOrder={settings.columnOrder} />
 
         {/* Job Progress Board */}
 
@@ -2307,7 +2336,9 @@ export default function DashboardPage() {
 
           <div className="mt-5 space-y-5">
             {JOB_STATUSES.map((status) => {
-              const statusJobs = jobs.filter((job) => job.status === status);
+              const statusJobs = orderedJobs.filter(
+                (job) => job.status === status,
+              );
               const styles = statusStyles[status];
               const pagination = boardPagination[status];
               const totalPages =
