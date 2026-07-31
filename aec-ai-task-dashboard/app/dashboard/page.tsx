@@ -1006,17 +1006,17 @@ const statusStyles: Record<
     hex: "#3b82f6",
   },
   "Pending Jobs": {
-    dot: "bg-teal-500",
-    badge: "bg-teal-50 text-teal-700",
-    numberBadge: "bg-teal-500 text-white",
-    leftBorder: "border-l-teal-500",
-    iconBackground: "bg-teal-500",
-    selectFocus: "focus:border-teal-500 focus:ring-teal-500/10",
+    dot: "bg-slate-600",
+    badge: "bg-slate-100 text-slate-700",
+    numberBadge: "bg-slate-600 text-white",
+    leftBorder: "border-l-slate-600",
+    iconBackground: "bg-slate-600",
+    selectFocus: "focus:border-slate-600 focus:ring-slate-600/10",
     calendar:
-      "border-teal-700 bg-teal-600 text-white shadow-sm ring-1 ring-teal-500/30",
+      "border-slate-800 bg-slate-700 text-white shadow-sm ring-1 ring-slate-500/30",
     customerBadge:
-      "border border-teal-500 bg-teal-100 text-teal-800 shadow-sm ring-1 ring-teal-200",
-    hex: "#14b8a6",
+      "border border-slate-500 bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-200",
+    hex: "#475569",
   },
   "In Progress": {
     dot: "bg-violet-500",
