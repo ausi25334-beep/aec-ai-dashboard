@@ -689,13 +689,19 @@ function JobDataTable({
   const visibleColumns = columnOrder.filter(
     (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
   );
+  const sortedJobs = useMemo(
+    () => [...jobs].sort(compareJobsByNewest),
+    [jobs],
+  );
   const totalPages =
-    pageSize === "Full" ? 1 : Math.max(1, Math.ceil(jobs.length / pageSize));
+    pageSize === "Full"
+      ? 1
+      : Math.max(1, Math.ceil(sortedJobs.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const visibleJobs =
     pageSize === "Full"
-      ? jobs
-      : jobs.slice((safePage - 1) * pageSize, safePage * pageSize);
+      ? sortedJobs
+      : sortedJobs.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -779,6 +785,7 @@ function JobDataTable({
         }}
         onPrevious={() => setPage(Math.max(1, safePage - 1))}
         onNext={() => setPage(Math.min(totalPages, safePage + 1))}
+        onPageChange={setPage}
       />
     </section>
   );
@@ -869,6 +876,7 @@ function PaginationControls({
   onPageSizeChange,
   onPrevious,
   onNext,
+  onPageChange,
 }: {
   page: number;
   totalPages: number;
@@ -876,7 +884,24 @@ function PaginationControls({
   onPageSizeChange: (pageSize: PageSize) => void;
   onPrevious: () => void;
   onNext: () => void;
+  onPageChange: (page: number) => void;
 }) {
+  const [pageInput, setPageInput] = useState(String(page));
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page, totalPages]);
+
+  function commitPageInput() {
+    const requestedPage = Number.parseInt(pageInput, 10);
+    const nextPage = Number.isFinite(requestedPage)
+      ? Math.min(totalPages, Math.max(1, requestedPage))
+      : page;
+
+    setPageInput(String(nextPage));
+    onPageChange(nextPage);
+  }
+
   return (
     <div className="flex flex-col items-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-5">
       <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -912,9 +937,30 @@ function PaginationControls({
           <ChevronLeftIcon />
         </button>
 
-        <span className="min-w-[72px] text-center text-xs font-semibold text-slate-500">
-          {page} / {totalPages}
-        </span>
+        <div className="flex min-w-[82px] items-center justify-center gap-1 text-xs font-semibold text-slate-500">
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={pageInput}
+            onChange={(event) => {
+              const nextValue = event.target.value.replace(/\D/g, "");
+              setPageInput(nextValue);
+            }}
+            onBlur={commitPageInput}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitPageInput();
+                event.currentTarget.blur();
+              }
+            }}
+            aria-label={`Current page, ${totalPages} pages total`}
+            className="h-8 w-10 rounded-lg border border-slate-200 bg-white px-1 text-center text-xs font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+          />
+          <span aria-hidden="true">/</span>
+          <span>{totalPages}</span>
+        </div>
 
         <button
           type="button"
@@ -1381,6 +1427,22 @@ function parseDateTime(value?: string) {
   );
 
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function compareJobsByNewest(a: Job, b: Job) {
+  const aDate = parseDateTime(a.jobInDateTime);
+  const bDate = parseDateTime(b.jobInDateTime);
+  const aTime = aDate?.getTime() ?? Number.NEGATIVE_INFINITY;
+  const bTime = bDate?.getTime() ?? Number.NEGATIVE_INFINITY;
+
+  if (aTime !== bTime) {
+    return bTime - aTime;
+  }
+
+  return b.jobId.localeCompare(a.jobId, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 function isJobScheduledOnDate(job: Job, dateKey: string) {
@@ -2452,6 +2514,15 @@ export default function DashboardPage() {
                         [status]: {
                           ...current[status],
                           page: Math.min(totalPages, safePage + 1),
+                        },
+                      }))
+                    }
+                    onPageChange={(nextPage) =>
+                      setBoardPagination((current) => ({
+                        ...current,
+                        [status]: {
+                          ...current[status],
+                          page: nextPage,
                         },
                       }))
                     }
