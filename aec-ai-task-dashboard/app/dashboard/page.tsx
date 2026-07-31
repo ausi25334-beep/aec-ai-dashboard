@@ -249,7 +249,13 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "Assigned Technician",
   ],
   technicianPhone: ["technician_phone", "technicianPhone", "Technician Phone"],
-  description: ["description_item", "description", "Description / Item"],
+  description: [
+    "description_/_item",
+    "description/item",
+    "description_item",
+    "description",
+    "Description / Item",
+  ],
   status: ["status", "Status"],
   inProgressStartDateTime: [
     "in_progress_start_datetime",
@@ -386,6 +392,8 @@ function mapJobRow(row: SupabaseRow): Job {
       "Technician Phone",
     ]),
     description: readText(row, [
+      "description_/_item",
+      "description/item",
       "description_item",
       "description",
       "Description / Item",
@@ -1052,17 +1060,17 @@ const statusStyles: Record<
     hex: "#3b82f6",
   },
   "Pending Jobs": {
-    dot: "bg-slate-600",
-    badge: "bg-slate-100 text-slate-700",
-    numberBadge: "bg-slate-600 text-white",
-    leftBorder: "border-l-slate-600",
-    iconBackground: "bg-slate-600",
-    selectFocus: "focus:border-slate-600 focus:ring-slate-600/10",
+    dot: "bg-pink-500",
+    badge: "bg-pink-50 text-pink-700",
+    numberBadge: "bg-pink-500 text-white",
+    leftBorder: "border-l-pink-500",
+    iconBackground: "bg-pink-500",
+    selectFocus: "focus:border-pink-500 focus:ring-pink-500/10",
     calendar:
-      "border-slate-800 bg-slate-700 text-white shadow-sm ring-1 ring-slate-500/30",
+      "border-pink-700 bg-pink-600 text-white shadow-sm ring-1 ring-pink-500/30",
     customerBadge:
-      "border border-slate-500 bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-200",
-    hex: "#475569",
+      "border border-pink-500 bg-pink-100 text-pink-800 shadow-sm ring-1 ring-pink-200",
+    hex: "#ec4899",
   },
   "In Progress": {
     dot: "bg-violet-500",
@@ -2191,35 +2199,25 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        {dayJobs.slice(0, 4).map((job) => (
+                        {dayJobs.map((job) => (
                           <button
                             type="button"
                             key={`${job.jobId}-${calendarDay.dateKey}`}
                             onClick={() => openJobDetails(job)}
-                            title={`Job ID: ${job.jobId || "-"} | Customer Company Name: ${
+                            title={`${job.jobId || "-"} ${
                               job.customerCompanyName || "-"
-                            } | Description: ${job.description || "-"}`}
-                            className={`block w-full rounded-lg border px-2 py-2 text-left text-[11px] font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
+                            }`}
+                            aria-label={`Open job ${job.jobId || "-"} for ${
+                              job.customerCompanyName || "-"
+                            }`}
+                            className={`block w-full rounded-lg border px-2 py-1.5 text-left text-[10pt] font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
                           >
-                            <span className="block truncate font-bold">
-                              Job ID: {job.jobId || "-"}
-                            </span>
-
-                            <span className="mt-1 block truncate font-medium">
-                              Company: {job.customerCompanyName || "-"}
-                            </span>
-
-                            <span className="mt-1 block truncate font-medium">
-                              Description: {job.description || "-"}
+                            <span className="block truncate">
+                              {job.jobId || "-"}{" "}
+                              {job.customerCompanyName || "-"}
                             </span>
                           </button>
                         ))}
-
-                        {dayJobs.length > 4 && (
-                          <div className="w-full rounded-lg bg-slate-100 px-2 py-1.5 text-left text-[11px] font-semibold text-slate-500">
-                            +{dayJobs.length - 4} more jobs
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
