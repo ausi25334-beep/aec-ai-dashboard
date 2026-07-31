@@ -1039,7 +1039,17 @@ export default function SettingsPage() {
               </>
             )}
 
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+              {saved && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 sm:w-auto"
+                >
+                  Settings saved successfully.
+                </div>
+              )}
+
               {activeCategory === "job-dashboard" && (
                 <button
                   type="button"
@@ -1066,12 +1076,6 @@ export default function SettingsPage() {
                 {saving ? "Saving..." : "Save Settings"}
               </button>
             </div>
-
-            {saved && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                Settings saved successfully.
-              </div>
-            )}
 
             {saveError && (
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
