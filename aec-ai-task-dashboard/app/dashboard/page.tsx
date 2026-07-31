@@ -67,12 +67,15 @@ type Job = {
   jobInDateTime: string;
 
   salesPerson: string;
+  salesPersonPhone: string;
 
   customerStatus: string;
   customerName: string;
+  customerPhone: string;
   customerCompanyName: string;
 
-  assignedEngineer: string;
+  assignedTechnician: string;
+  technicianPhone: string;
 
   description: string;
   status: JobStatus;
@@ -104,28 +107,59 @@ const JOB_COLUMN_KEYS = [
   "status",
   "customerCompanyName",
   "customerName",
+  "customerPhone",
   "description",
   "statusRemark",
   "reportNo",
   "collectionDateTime",
-  "assignedEngineer",
+  "assignedTechnician",
+  "technicianPhone",
   "jobCompleteDateTime",
   "invoiceNo",
   "inProgressStartDateTime",
   "inProgressEndDateTime",
   "salesPerson",
+  "salesPersonPhone",
 ] as const;
 
 type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
+
+/*
+  These are the only columns users can display and arrange.
+  The three legacy phone fields stay in the internal Job type so older
+  Supabase rows remain compatible, but they are not exposed in the
+  Dashboard table, Job Details, defaults, or Settings.
+*/
+const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
+  "jobId",
+  "jobInDateTime",
+  "customerStatus",
+  "status",
+  "customerCompanyName",
+  "customerName",
+  "description",
+  "statusRemark",
+  "reportNo",
+  "collectionDateTime",
+  "assignedTechnician",
+  "jobCompleteDateTime",
+  "invoiceNo",
+  "inProgressStartDateTime",
+  "inProgressEndDateTime",
+  "salesPerson",
+];
 
 const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobId: "Job ID",
   jobInDateTime: "Job In Date & Time",
   salesPerson: "Sales Person",
+  salesPersonPhone: "Sales Person Phone",
   customerStatus: "Customer Status",
   customerName: "Customer Name",
+  customerPhone: "Customer Phone",
   customerCompanyName: "Customer Company Name",
-  assignedEngineer: "Assigned Engineer",
+  assignedTechnician: "Assigned Engineer",
+  technicianPhone: "Technician Phone",
   description: "Description / Item",
   status: "Status",
   inProgressStartDateTime: "In Progress Start Date & Time",
@@ -137,25 +171,27 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   collectionDateTime: "Collection Date & Time",
 };
 
-const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
+const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...DISPLAY_JOB_COLUMN_KEYS];
+
+const HIDDEN_JOB_PHONE_COLUMNS = new Set<JobColumnKey>([
+  "customerPhone",
+  "technicianPhone",
+  "salesPersonPhone",
+]);
 
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
-  const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
+  const validKeys = new Set<JobColumnKey>(DISPLAY_JOB_COLUMN_KEYS);
   const savedKeys = Array.isArray(value)
-    ? value
-        .filter((key): key is string => typeof key === "string")
-        .map((key) =>
-          key === "assignedTechnician" ? "assignedEngineer" : key,
-        )
-        .filter((key): key is JobColumnKey =>
-          validKeys.has(key as JobColumnKey),
-        )
+    ? value.filter(
+        (key): key is JobColumnKey =>
+          typeof key === "string" && validKeys.has(key as JobColumnKey),
+      )
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
   return [
     ...uniqueSavedKeys,
-    ...JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
+    ...DISPLAY_JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
   ];
 }
 
@@ -168,20 +204,6 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
 
 const JOBS_TABLE = "aec-dashboard";
 const STAFF_TABLE = "aec-dashboard-admin";
-
-/*
-  Fetch only the job columns used by this Dashboard.
-  The deleted customer, sales person and technician phone columns are
-  intentionally absent. The engineer is read only from assigned_engineer.
-*/
-/*
-  Keep this as a literal string.
-  Supabase uses the literal value to infer the selected row type correctly.
-  Building it with .join(",") turns it into a generic string and can make
-  TypeScript report the query result as GenericStringError.
-*/
-const JOBS_SELECT_COLUMNS =
-  "job_id,job_in_datetime,sales_person,customer_status,customer_name,customer_company_name,assigned_engineer,description,status,in_progress_start_datetime,in_progress_end_datetime,status_remark_issue,job_complete_datetime,invoice_no,report_no,collection_datetime" as const;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -204,19 +226,29 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
   jobId: ["job_id", "jobId", "Job ID", "id"],
   jobInDateTime: ["job_in_datetime", "jobInDateTime", "Job In Date & Time"],
   salesPerson: ["sales_person", "salesPerson", "Sales Person"],
+  salesPersonPhone: [
+    "sales_person_phone",
+    "salesPersonPhone",
+    "Sales Person Phone",
+  ],
   customerStatus: ["customer_status", "customerStatus", "Customer Status"],
   customerName: ["customer_name", "customerName", "Customer Name"],
+  customerPhone: ["customer_phone", "customerPhone", "Customer Phone"],
   customerCompanyName: [
     "customer_company_name",
     "customerCompanyName",
     "Customer Company Name",
   ],
-  assignedEngineer: [
+  assignedTechnician: [
     "assigned_engineer",
     "assignedEngineer",
     "Assigned Engineer",
+    "assigned_technician",
+    "assignedTechnician",
+    "Assigned Technician",
   ],
-  description: ["description", "Description / Item"],
+  technicianPhone: ["technician_phone", "technicianPhone", "Technician Phone"],
+  description: ["description_item", "description", "Description / Item"],
   status: ["status", "Status"],
   inProgressStartDateTime: [
     "in_progress_start_datetime",
@@ -313,6 +345,11 @@ function mapJobRow(row: SupabaseRow): Job {
       readText(row, ["job_in_datetime", "jobInDateTime", "Job In Date & Time"]),
     ),
     salesPerson: readText(row, ["sales_person", "salesPerson", "Sales Person"]),
+    salesPersonPhone: readText(row, [
+      "sales_person_phone",
+      "salesPersonPhone",
+      "Sales Person Phone",
+    ]),
     customerStatus: readText(row, [
       "customer_status",
       "customerStatus",
@@ -323,17 +360,31 @@ function mapJobRow(row: SupabaseRow): Job {
       "customerName",
       "Customer Name",
     ]),
+    customerPhone: readText(row, [
+      "customer_phone",
+      "customerPhone",
+      "Customer Phone",
+    ]),
     customerCompanyName: readText(row, [
       "customer_company_name",
       "customerCompanyName",
       "Customer Company Name",
     ]),
-    assignedEngineer: readText(row, [
+    assignedTechnician: readText(row, [
       "assigned_engineer",
       "assignedEngineer",
       "Assigned Engineer",
+      "assigned_technician",
+      "assignedTechnician",
+      "Assigned Technician",
+    ]),
+    technicianPhone: readText(row, [
+      "technician_phone",
+      "technicianPhone",
+      "Technician Phone",
     ]),
     description: readText(row, [
+      "description_item",
       "description",
       "Description / Item",
     ]),
@@ -633,7 +684,9 @@ function JobDataTable({
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
-  const visibleColumns = columnOrder;
+  const visibleColumns = columnOrder.filter(
+    (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
+  );
   const totalPages =
     pageSize === "Full" ? 1 : Math.max(1, Math.ceil(jobs.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -1691,7 +1744,7 @@ export default function DashboardPage() {
       }
 
       const [jobsResult, staffResult] = await Promise.all([
-        supabase.from(JOBS_TABLE).select(JOBS_SELECT_COLUMNS),
+        supabase.from(JOBS_TABLE).select("*"),
         supabase.from(STAFF_TABLE).select("*"),
       ]);
 
@@ -2289,9 +2342,9 @@ export default function DashboardPage() {
                                 Sales: {job.salesPerson || "-"}
                               </p>
 
-                              {job.assignedEngineer && (
+                              {job.assignedTechnician && (
                                 <p className="mt-2 truncate text-xs font-medium text-slate-600">
-                                  Engineer: {job.assignedEngineer}
+                                  Engineer: {job.assignedTechnician}
                                 </p>
                               )}
 
@@ -2428,7 +2481,7 @@ const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
 ];
 
 const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
-  "assignedEngineer",
+  "assignedTechnician",
   "description",
   "status",
   "inProgressStartDateTime",
