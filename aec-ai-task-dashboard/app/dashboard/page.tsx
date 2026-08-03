@@ -18,7 +18,7 @@ const JOB_STATUSES = [
   "Pending Parts",
   "Pending Quotation",
   "Pending Invoice",
-  "Canceled",
+  "Cancelled",
   "Complete",
 ] as const;
 
@@ -36,7 +36,7 @@ const SECOND_ROW_STATUSES: readonly BoardJobStatus[] = [
   "Pending Parts",
   "Pending Quotation",
   "Pending Invoice",
-  "Canceled",
+  "Cancelled",
 ];
 
 const DISTRIBUTION_STATUSES: readonly BoardJobStatus[] = [
@@ -331,8 +331,8 @@ function normalizeJobStatus(value: string): JobStatus {
     "pending quotation": "Pending Quotation",
     "pending spare parts": "Pending Parts",
     "pending spec parts": "Pending Parts",
-    canceled: "Canceled",
-    cancelled: "Canceled",
+    canceled: "Cancelled",
+    cancelled: "Cancelled",
     complete: "Complete",
     completed: "Complete",
   };
@@ -661,7 +661,7 @@ function StatusIcon({
     );
   }
 
-  if (status === "Canceled") {
+  if (status === "Cancelled") {
     return (
       <svg {...commonProps}>
         <circle cx="12" cy="12" r="9" />
@@ -753,7 +753,7 @@ function JobDataTable({
                     className={`border-b transition ${
                       job.status === "Complete"
                         ? "border-emerald-300 bg-emerald-100 font-medium ring-1 ring-inset ring-emerald-300 hover:bg-emerald-200/80"
-                        : job.status === "Canceled"
+                        : job.status === "Cancelled"
                           ? "border-slate-300 bg-slate-200 font-medium ring-1 ring-inset ring-slate-300 hover:bg-slate-300/80"
                         : `border-slate-100 hover:bg-blue-50/40 ${
                             index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
@@ -1119,7 +1119,7 @@ const statusStyles: Record<
       "border border-cyan-500 bg-cyan-100 text-cyan-800 shadow-sm ring-1 ring-cyan-200",
     hex: "#06b6d4",
   },
-  Canceled: {
+  Cancelled: {
     dot: "bg-slate-500",
     badge: "bg-slate-200 text-slate-700",
     numberBadge: "bg-slate-500 text-white",
@@ -1153,7 +1153,7 @@ const displayLabels: Record<JobStatus, string> = {
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
   "Pending Invoice": "Pending Invoice",
-  Canceled: "Canceled",
+  Cancelled: "Cancelled",
   Complete: "Completed",
 };
 
@@ -1164,7 +1164,7 @@ const statisticLabels: Record<BoardJobStatus, string> = {
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
   "Pending Invoice": "Pending Invoice",
-  Canceled: "Canceled",
+  Cancelled: "Cancelled",
   Complete: "Completed",
 };
 
@@ -1175,7 +1175,7 @@ const distributionLabels: Record<BoardJobStatus, string> = {
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
   "Pending Invoice": "Pending Invoice",
-  Canceled: "Canceled",
+  Cancelled: "Cancelled",
   Complete: "Completed",
 };
 
@@ -1186,7 +1186,7 @@ const statusDescriptions: Record<BoardJobStatus, string> = {
   "Pending Parts": "Waiting for required parts",
   "Pending Quotation": "Waiting for quotation approval",
   "Pending Invoice": "Waiting for invoice processing",
-  Canceled: "Canceled jobs",
+  Cancelled: "Cancelled jobs",
   Complete: "Successfully completed jobs",
 };
 
