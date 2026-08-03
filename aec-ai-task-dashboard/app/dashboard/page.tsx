@@ -846,7 +846,7 @@ function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
   return (
     <TableCell
       value={value}
-      emphasized={column === "customerName"}
+      emphasized={false}
       wide={column === "description" || column === "statusRemark"}
     />
   );
@@ -2252,14 +2252,17 @@ export default function DashboardPage() {
             </div>
 
             {settings.showStageLegend && (
-              <div className="w-full max-w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:w-fit">
-                <p className="text-left text-xs font-semibold text-slate-500 xl:text-right">
-                  Stage Legend
-                </p>
+              <div className="w-full max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:w-fit">
+                <div className="flex min-w-max flex-nowrap items-center justify-start gap-x-4 xl:justify-end">
+                  <p className="shrink-0 whitespace-nowrap text-xs font-semibold text-slate-500">
+                    Stage Legend
+                  </p>
 
-                <div className="mt-2 flex flex-wrap items-center justify-start gap-x-4 gap-y-2 xl:justify-end">
                   {JOB_STATUSES.map((status) => (
-                    <div key={status} className="flex items-center gap-2">
+                    <div
+                      key={status}
+                      className="flex shrink-0 items-center gap-2"
+                    >
                       <span
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
                       />
@@ -2393,15 +2396,17 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            <h4 className="mt-3 whitespace-pre-wrap break-words text-sm font-semibold text-slate-900">
-                              {job.customerName}
+                            <h4 className="mt-3 whitespace-pre-wrap break-words text-base font-bold leading-5 text-slate-900">
+                              {job.customerCompanyName || "-"}
                             </h4>
 
-                            {job.customerCompanyName && (
-                              <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-500">
-                                {job.customerCompanyName}
-                              </p>
-                            )}
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-slate-600">
+                              {job.customerName || "-"}
+                            </p>
+
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-slate-500">
+                              {job.customerPhone || "-"}
+                            </p>
 
                             <p className="mt-3 min-h-[40px] whitespace-pre-wrap break-words text-sm leading-5 text-slate-600">
                               {job.description || "No description provided"}

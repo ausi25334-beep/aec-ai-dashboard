@@ -1061,7 +1061,7 @@ export default function SettingsPage() {
                 <div
                   role="status"
                   aria-live="polite"
-                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 sm:w-auto"
+                  className="w-full shrink-0 whitespace-nowrap rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs font-medium text-emerald-700 sm:w-auto"
                 >
                   Settings saved successfully.
                 </div>
