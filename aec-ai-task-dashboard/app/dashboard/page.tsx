@@ -695,9 +695,11 @@ function StatusIcon({
 function JobDataTable({
   jobs,
   columnOrder,
+  onOpenJob,
 }: {
   jobs: Job[];
   columnOrder: JobColumnKey[];
+  onOpenJob: (job: Job) => void;
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
@@ -759,7 +761,17 @@ function JobDataTable({
                 return (
                   <tr
                     key={job.jobId}
-                    className={`border-b transition ${
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open job details for ${job.jobId || "job"}`}
+                    onClick={() => onOpenJob(job)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenJob(job);
+                      }
+                    }}
+                    className={`cursor-pointer border-b transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500/50 ${
                       job.status === "Complete"
                         ? "border-emerald-300 bg-emerald-100 font-medium ring-1 ring-inset ring-emerald-300 hover:bg-emerald-200/80"
                         : job.status === "Cancelled"
@@ -2234,7 +2246,11 @@ export default function DashboardPage() {
 
         {/* Job Information Sheet */}
 
-        <JobDataTable jobs={orderedJobs} columnOrder={settings.columnOrder} />
+        <JobDataTable
+          jobs={orderedJobs}
+          columnOrder={settings.columnOrder}
+          onOpenJob={openJobDetails}
+        />
 
         {/* Job Progress Board */}
 
@@ -2253,25 +2269,27 @@ export default function DashboardPage() {
 
             {settings.showStageLegend && (
               <div className="w-full max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:w-fit">
-                <div className="flex min-w-max flex-nowrap items-center justify-start gap-x-4 xl:justify-end">
-                  <p className="shrink-0 whitespace-nowrap text-xs font-semibold text-slate-500">
+                <div className="min-w-max">
+                  <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     Stage Legend
                   </p>
 
-                  {JOB_STATUSES.map((status) => (
-                    <div
-                      key={status}
-                      className="flex shrink-0 items-center gap-2"
-                    >
-                      <span
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
-                      />
+                  <div className="mt-2 flex flex-nowrap items-center justify-start gap-x-4 xl:justify-end">
+                    {JOB_STATUSES.map((status) => (
+                      <div
+                        key={status}
+                        className="flex shrink-0 items-center gap-2"
+                      >
+                        <span
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
+                        />
 
-                      <span className="whitespace-nowrap text-xs font-medium text-slate-600">
-                        {displayLabels[status]}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="whitespace-nowrap text-xs font-medium text-slate-600">
+                          {displayLabels[status]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
