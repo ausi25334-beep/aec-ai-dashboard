@@ -125,24 +125,25 @@ type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
 
 /*
   These are the only columns users can display and arrange.
-  The three legacy phone fields stay in the internal Job type so older
+  The two legacy staff phone fields stay in the internal Job type so older
   Supabase rows remain compatible, but they are not exposed in the
   Dashboard table, Job Details, defaults, or Settings.
 */
 const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
   "jobId",
   "jobInDateTime",
+  "jobStartDateTime",
   "status",
   "customerCompanyName",
   "customerName",
+  "customerPhone",
   "description",
   "statusRemark",
   "reportNo",
-  "collectionDateTime",
-  "assignedTechnician",
-  "jobCompleteDateTime",
   "invoiceNo",
-  "jobStartDateTime",
+  "collectionDateTime",
+  "jobCompleteDateTime",
+  "assignedTechnician",
   "salesPerson",
 ];
 
@@ -169,7 +170,6 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
 const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...DISPLAY_JOB_COLUMN_KEYS];
 
 const HIDDEN_JOB_PHONE_COLUMNS = new Set<JobColumnKey>([
-  "customerPhone",
   "technicianPhone",
   "salesPersonPhone",
 ]);
@@ -231,7 +231,12 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "Sales Person Phone",
   ],
   customerName: ["customer_name", "customerName", "Customer Name"],
-  customerPhone: ["customer_phone", "customerPhone", "Customer Phone"],
+  customerPhone: [
+    "customer_phone",
+    "customer phone",
+    "customerPhone",
+    "Customer Phone",
+  ],
   customerCompanyName: [
     "customer_company_name",
     "customerCompanyName",
@@ -362,6 +367,7 @@ function mapJobRow(row: SupabaseRow): Job {
     ]),
     customerPhone: readText(row, [
       "customer_phone",
+      "customer phone",
       "customerPhone",
       "Customer Phone",
     ]),
@@ -447,6 +453,7 @@ type DashboardSettings = {
   showSummary: boolean;
   autoCompleteDate: boolean;
   columnOrder: JobColumnKey[];
+  defaultColumnOrder: JobColumnKey[];
 };
 
 const SETTINGS_ACCESS_ROLES = [
@@ -482,6 +489,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   showSummary: true,
   autoCompleteDate: true,
   columnOrder: DEFAULT_COLUMN_ORDER,
+  defaultColumnOrder: DEFAULT_COLUMN_ORDER,
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
@@ -502,6 +510,7 @@ function normalizeSettings(value: unknown): DashboardSettings {
         ? saved.appearance
         : DEFAULT_SETTINGS.appearance,
     columnOrder: normalizeColumnOrder(saved.columnOrder),
+    defaultColumnOrder: normalizeColumnOrder(saved.defaultColumnOrder),
   };
 }
 
@@ -805,7 +814,7 @@ function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
 
   if (column === "jobId") {
     return (
-      <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3 text-sm font-semibold text-blue-600">
+      <td className="whitespace-pre-wrap break-words border-r border-slate-100 px-4 py-3 text-sm font-semibold text-blue-600">
         {job.jobId || "-"}
       </td>
     );
@@ -854,8 +863,8 @@ function TableCell({
 }) {
   return (
     <td
-      className={`border-r border-slate-100 px-4 py-3 text-sm last:border-r-0 ${
-        wide ? "min-w-[240px] whitespace-normal" : "whitespace-nowrap"
+      className={`whitespace-pre-wrap break-words border-r border-slate-100 px-4 py-3 text-sm last:border-r-0 ${
+        wide ? "min-w-[240px]" : ""
       } ${emphasized ? "font-semibold text-slate-900" : "text-slate-600"}`}
     >
       {value?.trim() || "-"}
@@ -2199,11 +2208,11 @@ export default function DashboardPage() {
                             }`}
                             className={`block w-full rounded-lg border px-2 py-1.5 text-left font-semibold transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${statusStyles[job.status].calendar}`}
                           >
-                            <span className="block text-[10pt] leading-tight">
+                            <span className="block whitespace-pre-wrap break-words text-[10pt] leading-tight">
                               {job.jobId || "-"}
                             </span>
                             <span
-                              className="mt-0.5 block whitespace-normal break-words leading-[1.15] [overflow-wrap:anywhere]"
+                              className="mt-0.5 block whitespace-pre-wrap break-words leading-[1.15] [overflow-wrap:anywhere]"
                               style={{
                                 fontSize: getCalendarCompanyFontSize(
                                   job.customerCompanyName,
@@ -2373,7 +2382,7 @@ export default function DashboardPage() {
                             className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:p-4"
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <span className="truncate text-xs font-semibold text-blue-600">
+                              <span className="whitespace-pre-wrap break-words text-xs font-semibold text-blue-600">
                                 {job.jobId}
                               </span>
 
@@ -2384,39 +2393,39 @@ export default function DashboardPage() {
                               </span>
                             </div>
 
-                            <h4 className="mt-3 truncate text-sm font-semibold text-slate-900">
+                            <h4 className="mt-3 whitespace-pre-wrap break-words text-sm font-semibold text-slate-900">
                               {job.customerName}
                             </h4>
 
                             {job.customerCompanyName && (
-                              <p className="mt-1 truncate text-xs text-slate-500">
+                              <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-500">
                                 {job.customerCompanyName}
                               </p>
                             )}
 
-                            <p className="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-slate-600">
+                            <p className="mt-3 min-h-[40px] whitespace-pre-wrap break-words text-sm leading-5 text-slate-600">
                               {job.description || "No description provided"}
                             </p>
 
                             <div className="mt-4 border-t border-slate-100 pt-3">
-                              <p className="truncate text-xs text-slate-400">
+                              <p className="whitespace-pre-wrap break-words text-xs text-slate-400">
                                 Sales: {job.salesPerson || "-"}
                               </p>
 
                               {job.assignedTechnician && (
-                                <p className="mt-2 truncate text-xs font-medium text-slate-600">
+                                <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium text-slate-600">
                                   Engineer: {job.assignedTechnician}
                                 </p>
                               )}
 
                               {job.invoiceNo && (
-                                <p className="mt-2 truncate text-xs font-medium text-emerald-700">
+                                <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium text-emerald-700">
                                   Invoice: {job.invoiceNo}
                                 </p>
                               )}
 
                               {job.reportNo && (
-                                <p className="mt-2 truncate text-xs font-medium text-violet-700">
+                                <p className="mt-2 whitespace-pre-wrap break-words text-xs font-medium text-violet-700">
                                   Report: {job.reportNo}
                                 </p>
                               )}
@@ -2545,6 +2554,7 @@ const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
   "jobInDateTime",
   "salesPerson",
   "customerName",
+  "customerPhone",
   "customerCompanyName",
 ];
 
@@ -2596,11 +2606,7 @@ function ReadOnlyJobModal({
 
     return (
       <div
-        className={`mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-slate-900 ${
-          key === "description" || key === "statusRemark"
-            ? "whitespace-pre-wrap"
-            : "break-words"
-        }`}
+        className="mt-1.5 min-h-11 w-full whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-slate-900"
       >
         {displayValue}
       </div>

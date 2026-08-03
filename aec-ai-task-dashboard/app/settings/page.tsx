@@ -11,17 +11,18 @@ import { useRouter } from "next/navigation";
 const JOB_COLUMN_KEYS = [
   "jobId",
   "jobInDateTime",
+  "jobStartDateTime",
   "status",
   "customerCompanyName",
   "customerName",
+  "customerPhone",
   "description",
   "statusRemark",
   "reportNo",
-  "collectionDateTime",
-  "assignedTechnician",
-  "jobCompleteDateTime",
   "invoiceNo",
-  "jobStartDateTime",
+  "collectionDateTime",
+  "jobCompleteDateTime",
+  "assignedTechnician",
   "salesPerson",
 ] as const;
 
@@ -32,6 +33,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobInDateTime: "Job In Date & Time",
   salesPerson: "Sales Person",
   customerName: "Customer Name",
+  customerPhone: "Customer Phone",
   customerCompanyName: "Customer Company Name",
   assignedTechnician: "Assigned Engineer",
   description: "Description / Item",
@@ -80,6 +82,7 @@ type DashboardSettings = {
   showSummary: boolean;
   autoCompleteDate: boolean;
   columnOrder: JobColumnKey[];
+  defaultColumnOrder: JobColumnKey[];
 };
 
 type SettingsCategory = "organization" | "job-dashboard";
@@ -126,6 +129,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   showSummary: true,
   autoCompleteDate: true,
   columnOrder: DEFAULT_COLUMN_ORDER,
+  defaultColumnOrder: DEFAULT_COLUMN_ORDER,
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
@@ -146,6 +150,7 @@ function normalizeSettings(value: unknown): DashboardSettings {
         ? saved.appearance
         : DEFAULT_SETTINGS.appearance,
     columnOrder: normalizeColumnOrder(saved.columnOrder),
+    defaultColumnOrder: normalizeColumnOrder(saved.defaultColumnOrder),
   };
 }
 
@@ -488,7 +493,7 @@ export default function SettingsPage() {
       showStageLegend: DEFAULT_SETTINGS.showStageLegend,
       showSummary: DEFAULT_SETTINGS.showSummary,
       autoCompleteDate: DEFAULT_SETTINGS.autoCompleteDate,
-      columnOrder: [...DEFAULT_COLUMN_ORDER],
+      columnOrder: [...settings.defaultColumnOrder],
     };
 
     const nextSettings = {
@@ -498,6 +503,18 @@ export default function SettingsPage() {
 
     setSettings(nextSettings);
     await saveSharedSettings(normalizeSettings(nextSettings));
+  }
+
+  async function handleSetDefault() {
+    if (!canManageSettings(currentUser?.role)) return;
+
+    const nextSettings = normalizeSettings({
+      ...settings,
+      defaultColumnOrder: [...settings.columnOrder],
+    });
+
+    setSettings(nextSettings);
+    await saveSharedSettings(nextSettings);
   }
 
   function moveColumn(column: JobColumnKey, direction: -1 | 1) {
@@ -1053,7 +1070,19 @@ export default function SettingsPage() {
               {activeCategory === "job-dashboard" && (
                 <button
                   type="button"
+                  onClick={handleSetDefault}
+                  disabled={saving}
+                  className="h-11 w-full rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  Set Default
+                </button>
+              )}
+
+              {activeCategory === "job-dashboard" && (
+                <button
+                  type="button"
                   onClick={handleReset}
+                  disabled={saving}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
                 >
                   Reset Default
