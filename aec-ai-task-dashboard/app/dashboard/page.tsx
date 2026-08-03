@@ -18,6 +18,7 @@ const JOB_STATUSES = [
   "Pending Parts",
   "Pending Quotation",
   "Pending Invoice",
+  "Canceled",
   "Complete",
 ] as const;
 
@@ -35,6 +36,7 @@ const SECOND_ROW_STATUSES: readonly BoardJobStatus[] = [
   "Pending Parts",
   "Pending Quotation",
   "Pending Invoice",
+  "Canceled",
 ];
 
 const DISTRIBUTION_STATUSES: readonly BoardJobStatus[] = [
@@ -70,7 +72,6 @@ type Job = {
   salesPerson: string;
   salesPersonPhone: string;
 
-  customerStatus: string;
   customerName: string;
   customerPhone: string;
   customerCompanyName: string;
@@ -81,8 +82,7 @@ type Job = {
   description: string;
   status: JobStatus;
 
-  inProgressStartDateTime: string;
-  inProgressEndDateTime: string;
+  jobStartDateTime: string;
 
   statusRemark: string;
   jobCompleteDateTime: string;
@@ -104,7 +104,6 @@ type Job = {
 const JOB_COLUMN_KEYS = [
   "jobId",
   "jobInDateTime",
-  "customerStatus",
   "status",
   "customerCompanyName",
   "customerName",
@@ -117,8 +116,7 @@ const JOB_COLUMN_KEYS = [
   "technicianPhone",
   "jobCompleteDateTime",
   "invoiceNo",
-  "inProgressStartDateTime",
-  "inProgressEndDateTime",
+  "jobStartDateTime",
   "salesPerson",
   "salesPersonPhone",
 ] as const;
@@ -134,7 +132,6 @@ type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
 const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
   "jobId",
   "jobInDateTime",
-  "customerStatus",
   "status",
   "customerCompanyName",
   "customerName",
@@ -145,8 +142,7 @@ const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
   "assignedTechnician",
   "jobCompleteDateTime",
   "invoiceNo",
-  "inProgressStartDateTime",
-  "inProgressEndDateTime",
+  "jobStartDateTime",
   "salesPerson",
 ];
 
@@ -155,7 +151,6 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobInDateTime: "Job In Date & Time",
   salesPerson: "Sales Person",
   salesPersonPhone: "Sales Person Phone",
-  customerStatus: "Customer Status",
   customerName: "Customer Name",
   customerPhone: "Customer Phone",
   customerCompanyName: "Customer Company Name",
@@ -163,8 +158,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   technicianPhone: "Technician Phone",
   description: "Description / Item",
   status: "Status",
-  inProgressStartDateTime: "In Progress Start Date & Time",
-  inProgressEndDateTime: "In Progress End Date & Time",
+  jobStartDateTime: "Job Start Date & Time",
   statusRemark: "Status Remark / Issue",
   jobCompleteDateTime: "Job Complete Date & Time",
   invoiceNo: "Invoice No.",
@@ -183,10 +177,14 @@ const HIDDEN_JOB_PHONE_COLUMNS = new Set<JobColumnKey>([
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
   const validKeys = new Set<JobColumnKey>(DISPLAY_JOB_COLUMN_KEYS);
   const savedKeys = Array.isArray(value)
-    ? value.filter(
-        (key): key is JobColumnKey =>
-          typeof key === "string" && validKeys.has(key as JobColumnKey),
-      )
+    ? value
+        .map((key) =>
+          key === "inProgressStartDateTime" ? "jobStartDateTime" : key,
+        )
+        .filter(
+          (key): key is JobColumnKey =>
+            typeof key === "string" && validKeys.has(key as JobColumnKey),
+        )
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
@@ -232,7 +230,6 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "salesPersonPhone",
     "Sales Person Phone",
   ],
-  customerStatus: ["customer_status", "customerStatus", "Customer Status"],
   customerName: ["customer_name", "customerName", "Customer Name"],
   customerPhone: ["customer_phone", "customerPhone", "Customer Phone"],
   customerCompanyName: [
@@ -257,15 +254,13 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "Description / Item",
   ],
   status: ["status", "Status"],
-  inProgressStartDateTime: [
+  jobStartDateTime: [
+    "job_start_datetime",
     "in_progress_start_datetime",
+    "jobStartDateTime",
     "inProgressStartDateTime",
+    "Job Start Date & Time",
     "In Progress Start Date & Time",
-  ],
-  inProgressEndDateTime: [
-    "in_progress_end_datetime",
-    "inProgressEndDateTime",
-    "In Progress End Date & Time",
   ],
   statusRemark: [
     "status_remark_issue",
@@ -336,6 +331,8 @@ function normalizeJobStatus(value: string): JobStatus {
     "pending quotation": "Pending Quotation",
     "pending spare parts": "Pending Parts",
     "pending spec parts": "Pending Parts",
+    canceled: "Canceled",
+    cancelled: "Canceled",
     complete: "Complete",
     completed: "Complete",
   };
@@ -357,11 +354,6 @@ function mapJobRow(row: SupabaseRow): Job {
       "sales_person_phone",
       "salesPersonPhone",
       "Sales Person Phone",
-    ]),
-    customerStatus: readText(row, [
-      "customer_status",
-      "customerStatus",
-      "Customer Status",
     ]),
     customerName: readText(row, [
       "customer_name",
@@ -399,18 +391,14 @@ function mapJobRow(row: SupabaseRow): Job {
       "Description / Item",
     ]),
     status: normalizeJobStatus(readText(row, ["status", "Status"])),
-    inProgressStartDateTime: normalizeDateTime(
+    jobStartDateTime: normalizeDateTime(
       readText(row, [
+        "job_start_datetime",
         "in_progress_start_datetime",
+        "jobStartDateTime",
         "inProgressStartDateTime",
+        "Job Start Date & Time",
         "In Progress Start Date & Time",
-      ]),
-    ),
-    inProgressEndDateTime: normalizeDateTime(
-      readText(row, [
-        "in_progress_end_datetime",
-        "inProgressEndDateTime",
-        "In Progress End Date & Time",
       ]),
     ),
     statusRemark: readText(row, [
@@ -673,6 +661,16 @@ function StatusIcon({
     );
   }
 
+  if (status === "Canceled") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m9 9 6 6" />
+        <path d="m15 9-6 6" />
+      </svg>
+    );
+  }
+
   return (
     <svg {...commonProps}>
       <circle cx="12" cy="12" r="9" />
@@ -755,6 +753,8 @@ function JobDataTable({
                     className={`border-b transition ${
                       job.status === "Complete"
                         ? "border-emerald-300 bg-emerald-100 font-medium ring-1 ring-inset ring-emerald-300 hover:bg-emerald-200/80"
+                        : job.status === "Canceled"
+                          ? "border-slate-300 bg-slate-200 font-medium ring-1 ring-inset ring-slate-300 hover:bg-slate-300/80"
                         : `border-slate-100 hover:bg-blue-50/40 ${
                             index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                           }`
@@ -811,20 +811,6 @@ function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
     );
   }
 
-  if (column === "customerStatus") {
-    return (
-      <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
-        <span
-          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getCustomerStatusStyle(
-            job.customerStatus,
-          )}`}
-        >
-          {job.customerStatus || "-"}
-        </span>
-      </td>
-    );
-  }
-
   if (column === "status") {
     return (
       <td className="whitespace-nowrap border-r border-slate-100 px-4 py-3">
@@ -840,8 +826,7 @@ function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
 
   const dateTimeColumns: JobColumnKey[] = [
     "jobInDateTime",
-    "inProgressStartDateTime",
-    "inProgressEndDateTime",
+    "jobStartDateTime",
     "jobCompleteDateTime",
     "collectionDateTime",
   ];
@@ -1134,6 +1119,18 @@ const statusStyles: Record<
       "border border-cyan-500 bg-cyan-100 text-cyan-800 shadow-sm ring-1 ring-cyan-200",
     hex: "#06b6d4",
   },
+  Canceled: {
+    dot: "bg-slate-500",
+    badge: "bg-slate-200 text-slate-700",
+    numberBadge: "bg-slate-500 text-white",
+    leftBorder: "border-l-slate-500",
+    iconBackground: "bg-slate-500",
+    selectFocus: "focus:border-slate-500 focus:ring-slate-500/10",
+    calendar: "border-slate-400 bg-slate-200 text-slate-800",
+    customerBadge:
+      "border border-slate-400 bg-slate-200 text-slate-800 shadow-sm ring-1 ring-slate-300",
+    hex: "#64748b",
+  },
   Complete: {
     dot: "bg-emerald-500",
     badge: "bg-emerald-50 text-emerald-700",
@@ -1148,20 +1145,6 @@ const statusStyles: Record<
   },
 };
 
-const customerStatusStyles: Record<string, string> = {
-  "New Customer":
-    "border border-fuchsia-700 bg-fuchsia-600 text-white shadow-sm ring-1 ring-fuchsia-400/40",
-  "Existing Customer":
-    "border border-teal-700 bg-teal-600 text-white shadow-sm ring-1 ring-teal-400/40",
-};
-
-function getCustomerStatusStyle(customerStatus?: string) {
-  return (
-    customerStatusStyles[customerStatus || ""] ||
-    "border border-slate-500 bg-slate-600 text-white shadow-sm"
-  );
-}
-
 const displayLabels: Record<JobStatus, string> = {
   "New Jobs": "New Jobs",
   "Pending Jobs": "Pending Jobs",
@@ -1170,6 +1153,7 @@ const displayLabels: Record<JobStatus, string> = {
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
   "Pending Invoice": "Pending Invoice",
+  Canceled: "Canceled",
   Complete: "Completed",
 };
 
@@ -1180,6 +1164,7 @@ const statisticLabels: Record<BoardJobStatus, string> = {
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
   "Pending Invoice": "Pending Invoice",
+  Canceled: "Canceled",
   Complete: "Completed",
 };
 
@@ -1190,6 +1175,7 @@ const distributionLabels: Record<BoardJobStatus, string> = {
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
   "Pending Invoice": "Pending Invoice",
+  Canceled: "Canceled",
   Complete: "Completed",
 };
 
@@ -1200,6 +1186,7 @@ const statusDescriptions: Record<BoardJobStatus, string> = {
   "Pending Parts": "Waiting for required parts",
   "Pending Quotation": "Waiting for quotation approval",
   "Pending Invoice": "Waiting for invoice processing",
+  Canceled: "Canceled jobs",
   Complete: "Successfully completed jobs",
 };
 
@@ -1466,10 +1453,9 @@ function getCalendarCompanyFontSize(companyName?: string) {
 
 function isJobScheduledOnDate(job: Job, dateKey: string) {
   /*
-    The Calendar is positioned by In Progress Start Date & Time.
-    The End value is not required for a job to appear.
+    The Calendar is positioned by Job Start Date & Time.
   */
-  return getJobDateKey(job.inProgressStartDateTime) === dateKey;
+  return getJobDateKey(job.jobStartDateTime) === dateKey;
 }
 
 function formatDisplayDateTime(value?: string) {
@@ -1498,25 +1484,6 @@ function formatDisplayDateTime(value?: string) {
   ).padStart(2, "0")} ${meridiem}`;
 
   return `${formattedDate}, ${formattedTime}`;
-}
-
-function formatInProgressPeriod(startDateTime?: string, endDateTime?: string) {
-  const hasStart = Boolean(startDateTime?.trim());
-  const hasEnd = Boolean(endDateTime?.trim());
-
-  if (!hasStart && !hasEnd) return "-";
-
-  if (hasStart && !hasEnd) {
-    return formatDisplayDateTime(startDateTime);
-  }
-
-  if (!hasStart && hasEnd) {
-    return formatDisplayDateTime(endDateTime);
-  }
-
-  return `${formatDisplayDateTime(
-    startDateTime,
-  )} → ${formatDisplayDateTime(endDateTime)}`;
 }
 
 function getCalendarDays(viewDate: Date) {
@@ -2085,7 +2052,7 @@ export default function DashboardPage() {
               ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {SECOND_ROW_STATUSES.map((status) =>
               statisticCards.find((card) => card.status === status),
             )
@@ -2411,12 +2378,9 @@ export default function DashboardPage() {
                               </span>
 
                               <span
-                                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${getCustomerStatusStyle(
-                                  job.customerStatus,
-                                )}`}
+                                className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusStyles[job.status].calendar}`}
                               >
-                                {job.customerStatus ||
-                                  displayLabels[job.status]}
+                                {displayLabels[job.status]}
                               </span>
                             </div>
 
@@ -2466,10 +2430,9 @@ export default function DashboardPage() {
                                 />
 
                                 <DateTimeDisplayRow
-                                  label="In Progress"
-                                  value={formatInProgressPeriod(
-                                    job.inProgressStartDateTime,
-                                    job.inProgressEndDateTime,
+                                  label="Job Start"
+                                  value={formatDisplayDateTime(
+                                    job.jobStartDateTime,
                                   )}
                                 />
 
@@ -2581,7 +2544,6 @@ const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
   "jobId",
   "jobInDateTime",
   "salesPerson",
-  "customerStatus",
   "customerName",
   "customerCompanyName",
 ];
@@ -2590,8 +2552,7 @@ const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
   "assignedTechnician",
   "description",
   "status",
-  "inProgressStartDateTime",
-  "inProgressEndDateTime",
+  "jobStartDateTime",
   "statusRemark",
   "jobCompleteDateTime",
   "invoiceNo",
@@ -2601,8 +2562,7 @@ const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
 
 const DATE_TIME_FIELDS = new Set<JobColumnKey>([
   "jobInDateTime",
-  "inProgressStartDateTime",
-  "inProgressEndDateTime",
+  "jobStartDateTime",
   "jobCompleteDateTime",
   "collectionDateTime",
 ]);

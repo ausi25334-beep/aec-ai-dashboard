@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 const JOB_COLUMN_KEYS = [
   "jobId",
   "jobInDateTime",
-  "customerStatus",
   "status",
   "customerCompanyName",
   "customerName",
@@ -22,8 +21,7 @@ const JOB_COLUMN_KEYS = [
   "assignedTechnician",
   "jobCompleteDateTime",
   "invoiceNo",
-  "inProgressStartDateTime",
-  "inProgressEndDateTime",
+  "jobStartDateTime",
   "salesPerson",
 ] as const;
 
@@ -33,14 +31,12 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobId: "Job ID",
   jobInDateTime: "Job In Date & Time",
   salesPerson: "Sales Person",
-  customerStatus: "Customer Status",
   customerName: "Customer Name",
   customerCompanyName: "Customer Company Name",
   assignedTechnician: "Assigned Engineer",
   description: "Description / Item",
   status: "Status",
-  inProgressStartDateTime: "In Progress Start Date & Time",
-  inProgressEndDateTime: "In Progress End Date & Time",
+  jobStartDateTime: "Job Start Date & Time",
   statusRemark: "Status Remark / Issue",
   jobCompleteDateTime: "Job Complete Date & Time",
   invoiceNo: "Invoice No.",
@@ -53,10 +49,14 @@ const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
   const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
   const savedKeys = Array.isArray(value)
-    ? value.filter(
-        (key): key is JobColumnKey =>
-          typeof key === "string" && validKeys.has(key as JobColumnKey),
-      )
+    ? value
+        .map((key) =>
+          key === "inProgressStartDateTime" ? "jobStartDateTime" : key,
+        )
+        .filter(
+          (key): key is JobColumnKey =>
+            typeof key === "string" && validKeys.has(key as JobColumnKey),
+        )
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
