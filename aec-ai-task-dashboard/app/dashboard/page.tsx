@@ -2959,18 +2959,6 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="p-3 sm:p-4">
-                    {boardLocation && (
-                      <div
-                        role="status"
-                        className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
-                      >
-                        <span>
-                          Located {boardLocation.jobId} on Page {boardLocation.page}, Row {boardLocation.row}.
-                        </span>
-                        <span className="shrink-0">Highlighted below</span>
-                      </div>
-                    )}
-
                     {statusJobs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                         {paginatedStatusJobs.map((job) => (
