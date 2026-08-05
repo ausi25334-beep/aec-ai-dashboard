@@ -499,7 +499,7 @@ type DashboardSettings = {
   companyName: string;
   dashboardTitle: string;
   administratorName: string;
-  operationsTeam: string;
+  topmanagementSetting: string;
   appearance: "system" | "light" | "dark";
   appearanceDefaultVersion: number;
   language: string;
@@ -535,7 +535,7 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   companyName: "AEC Company",
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
-  operationsTeam: "Operations Team",
+  topmanagementSetting: "Top Management Setting",
   appearance: "light",
   appearanceDefaultVersion: 2,
   language: "default",
@@ -2486,7 +2486,7 @@ export default function DashboardPage() {
               </p>
 
               <p className="text-xs text-slate-400">
-                {settings.operationsTeam}
+                {settings.topmanagementSetting}
               </p>
             </div>
 
