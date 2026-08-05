@@ -55,6 +55,15 @@ type BoardPaginationState = Record<
   { page: number; pageSize: PageSize }
 >;
 
+type BoardSearchState = Record<BoardJobStatus, string>;
+
+function createDefaultBoardSearch(): BoardSearchState {
+  return JOB_STATUSES.reduce((state, status) => {
+    state[status] = "";
+    return state;
+  }, {} as BoardSearchState);
+}
+
 type PaginationAreaKey = "job-information-sheet" | BoardJobStatus;
 type SavedPaginationDefaults = Partial<Record<PaginationAreaKey, PageSize>>;
 
@@ -749,6 +758,8 @@ function JobDataTable({
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
+  const [sortColumn, setSortColumn] = useState<JobColumnKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     const savedDefault = readPaginationDefaults()["job-information-sheet"];
@@ -765,11 +776,35 @@ function JobDataTable({
   const visibleColumns = columnOrder.filter(
     (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
   );
-  /*
-    DashboardPage passes the shared orderedJobs array here. Keeping that exact
-    order makes the Job Information Sheet and every Job Progress Board agree.
-  */
-  const sortedJobs = jobs;
+  const sortedJobs = useMemo(() => {
+    if (!sortColumn) return jobs;
+
+    return jobs
+      .map((job, originalIndex) => ({ job, originalIndex }))
+      .sort((a, b) => {
+        const comparison = compareJobsByColumn(
+          a.job,
+          b.job,
+          sortColumn,
+          sortDirection,
+        );
+
+        return comparison || a.originalIndex - b.originalIndex;
+      })
+      .map(({ job }) => job);
+  }, [jobs, sortColumn, sortDirection]);
+
+  function changeSort(column: JobColumnKey) {
+    setPage(1);
+
+    if (sortColumn === column) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortColumn(column);
+    setSortDirection("asc");
+  }
   const totalPages =
     pageSize === "Full"
       ? 1
@@ -808,7 +843,35 @@ function JobDataTable({
                   scope="col"
                   className="whitespace-nowrap border-r border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600 last:border-r-0"
                 >
-                  {JOB_COLUMN_LABELS[column]}
+                  <button
+                    type="button"
+                    onClick={() => changeSort(column)}
+                    aria-label={`Sort ${JOB_COLUMN_LABELS[column]} ${
+                      sortColumn === column && sortDirection === "asc"
+                        ? "descending"
+                        : "ascending"
+                    }`}
+                    title={`Sort ${JOB_COLUMN_LABELS[column]}`}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-left transition hover:bg-slate-200/70 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                      sortColumn === column ? "text-blue-700" : ""
+                    }`}
+                  >
+                    <span>{JOB_COLUMN_LABELS[column]}</span>
+                    <span
+                      aria-hidden="true"
+                      className={`text-[12px] ${
+                        sortColumn === column
+                          ? "font-bold text-blue-600"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {sortColumn === column
+                        ? sortDirection === "asc"
+                          ? "▲"
+                          : "▼"
+                        : "⇅"}
+                    </span>
+                  </button>
                 </th>
               ))}
             </tr>
@@ -1559,6 +1622,69 @@ function compareJobsByNewest(a: Job, b: Job) {
   });
 }
 
+const JOB_DATE_COLUMNS = new Set<JobColumnKey>([
+  "jobInDateTime",
+  "jobStartDateTime",
+  "jobCompleteDateTime",
+  "collectionDateTime",
+]);
+
+const JOB_STATUS_SORT_ORDER: readonly JobStatus[] = [
+  "New Jobs",
+  "Pending Jobs",
+  "In Progress",
+  "Claim Warranty",
+  "Pending Parts",
+  "Pending Quotation",
+  "Pending Invoice",
+  "Cancelled",
+  "Complete",
+];
+
+const naturalJobSort = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareJobsByColumn(
+  a: Job,
+  b: Job,
+  column: JobColumnKey,
+  direction: "asc" | "desc",
+) {
+  const multiplier = direction === "asc" ? 1 : -1;
+  const aValue = String(a[column] ?? "").trim();
+  const bValue = String(b[column] ?? "").trim();
+
+  // Empty values always stay at the bottom in either direction.
+  if (!aValue && !bValue) return 0;
+  if (!aValue) return 1;
+  if (!bValue) return -1;
+
+  if (JOB_DATE_COLUMNS.has(column)) {
+    const aTime = parseDateTime(aValue)?.getTime();
+    const bTime = parseDateTime(bValue)?.getTime();
+
+    if (aTime !== undefined && bTime !== undefined && aTime !== bTime) {
+      return (aTime - bTime) * multiplier;
+    }
+  }
+
+  if (column === "status") {
+    const aRank = JOB_STATUS_SORT_ORDER.indexOf(a.status);
+    const bRank = JOB_STATUS_SORT_ORDER.indexOf(b.status);
+
+    if (aRank !== bRank) return (aRank - bRank) * multiplier;
+  }
+
+  /*
+    Natural comparison sorts embedded numbers by value (2 before 10), while
+    still handling names, phone numbers, Job IDs, invoices and report IDs as
+    case-insensitive text. This avoids treating identifier dots as decimals.
+  */
+  return naturalJobSort.compare(aValue, bValue) * multiplier;
+}
+
 function jobMatchesGlobalSearch(job: Job, query: string) {
   const normalizeSearchText = (value: unknown) =>
     String(value ?? "").normalize("NFKC").toLocaleLowerCase();
@@ -1777,6 +1903,16 @@ export default function DashboardPage() {
   const [activeSearchSuggestion, setActiveSearchSuggestion] = useState(-1);
   const [boardPagination, setBoardPagination] =
     useState<BoardPaginationState>(createDefaultBoardPagination);
+  const [boardSearch, setBoardSearch] =
+    useState<BoardSearchState>(createDefaultBoardSearch);
+  const [focusedBoardSearch, setFocusedBoardSearch] =
+    useState<BoardJobStatus | null>(null);
+  const [highlightedBoardJob, setHighlightedBoardJob] = useState<{
+    status: BoardJobStatus;
+    jobId: string;
+    page: number;
+    row: number;
+  } | null>(null);
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -2084,6 +2220,34 @@ export default function DashboardPage() {
     setActiveSearchSuggestion(-1);
   }, [globalSearch]);
 
+  useEffect(() => {
+    if (!highlightedBoardJob) return;
+
+    const scrollTimer = window.setTimeout(() => {
+      const selector = `[data-board-status="${encodeURIComponent(
+        highlightedBoardJob.status,
+      )}"][data-board-job-id="${encodeURIComponent(
+        highlightedBoardJob.jobId,
+      )}"]`;
+      const card = document.querySelector<HTMLElement>(selector);
+      card?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+
+    const clearTimer = window.setTimeout(() => {
+      setHighlightedBoardJob((current) =>
+        current?.status === highlightedBoardJob.status &&
+        current.jobId === highlightedBoardJob.jobId
+          ? null
+          : current,
+      );
+    }, 6000);
+
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [highlightedBoardJob, boardPagination]);
+
   const statusCounts = useMemo(() => {
     return JOB_STATUSES.reduce(
       (counts, status) => {
@@ -2155,10 +2319,34 @@ export default function DashboardPage() {
   }
 
   function selectSearchSuggestion(job: Job) {
-    setGlobalSearch(job.jobId);
     setSearchHasFocus(false);
     setActiveSearchSuggestion(-1);
     openJobDetails(job);
+  }
+
+  function locateJobInBoard(
+    status: BoardJobStatus,
+    job: Job,
+    statusJobs: Job[],
+  ) {
+    const jobIndex = statusJobs.findIndex(
+      (candidate) => candidate.jobId === job.jobId,
+    );
+
+    if (jobIndex < 0) return;
+
+    const pageSize = boardPagination[status].pageSize;
+    const page = pageSize === "Full" ? 1 : Math.floor(jobIndex / pageSize) + 1;
+    const indexOnPage =
+      pageSize === "Full" ? jobIndex : jobIndex % pageSize;
+    const row = Math.floor(indexOnPage / 5) + 1;
+
+    setBoardPagination((current) => ({
+      ...current,
+      [status]: { ...current[status], page },
+    }));
+    setFocusedBoardSearch(null);
+    setHighlightedBoardJob({ status, jobId: job.jobId, page, row });
   }
 
   return (
@@ -2642,6 +2830,16 @@ export default function DashboardPage() {
                       (safePage - 1) * pagination.pageSize,
                       safePage * pagination.pageSize,
                     );
+              const boardQuery = boardSearch[status];
+              const boardSearchResults = boardQuery.trim()
+                ? statusJobs.filter((job) =>
+                    jobMatchesGlobalSearch(job, boardQuery),
+                  )
+                : [];
+              const boardLocation =
+                highlightedBoardJob?.status === status
+                  ? highlightedBoardJob
+                  : null;
 
               return (
                 <div
@@ -2673,23 +2871,120 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <span
-                      className={`self-end rounded-full px-4 py-1.5 text-xs font-semibold sm:self-auto ${styles.badge}`}
-                    >
-                      {statusJobs.length}{" "}
-                      {statusJobs.length === 1 ? "job" : "jobs"}
-                    </span>
+                    <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+                      <div className="relative w-full sm:w-64">
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                          <SearchIcon />
+                        </span>
+
+                        <input
+                          type="search"
+                          value={boardQuery}
+                          onChange={(event) => {
+                            setBoardSearch((current) => ({
+                              ...current,
+                              [status]: event.target.value,
+                            }));
+                            setFocusedBoardSearch(status);
+                          }}
+                          onFocus={() => setFocusedBoardSearch(status)}
+                          onBlur={() => setFocusedBoardSearch(null)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              setFocusedBoardSearch(null);
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          placeholder="Search jobs..."
+                          aria-label={`Search ${displayLabels[status]}`}
+                          aria-expanded={
+                            focusedBoardSearch === status &&
+                            Boolean(boardQuery.trim())
+                          }
+                          className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-14 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                        />
+
+                        {boardQuery.trim() && (
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[10px] font-semibold text-blue-600">
+                            {boardSearchResults.length}
+                          </span>
+                        )}
+
+                        {focusedBoardSearch === status &&
+                          boardQuery.trim() && (
+                            <div
+                              role="listbox"
+                              aria-label={`Matching ${displayLabels[status]} jobs`}
+                              className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-40 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+                            >
+                              {boardSearchResults.length > 0 ? (
+                                boardSearchResults.map((job, resultIndex) => (
+                                  <button
+                                    key={`${status}-${job.jobId}-${resultIndex}`}
+                                    type="button"
+                                    role="option"
+                                    onMouseDown={(event) =>
+                                      event.preventDefault()
+                                    }
+                                    onClick={() =>
+                                      locateJobInBoard(status, job, statusJobs)
+                                    }
+                                    className="flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
+                                  >
+                                    <span className="font-semibold text-blue-600">
+                                      {job.jobId || "-"}
+                                    </span>
+                                    <span className="mx-2 text-slate-300">-</span>
+                                    <span className="min-w-0 truncate">
+                                      {job.customerCompanyName || "-"}
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <p className="px-3 py-3 text-sm text-slate-400">
+                                  Not Found
+                                </p>
+                              )}
+                            </div>
+                          )}
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold ${styles.badge}`}
+                      >
+                        {statusJobs.length}{" "}
+                        {statusJobs.length === 1 ? "job" : "jobs"}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="p-3 sm:p-4">
+                    {boardLocation && (
+                      <div
+                        role="status"
+                        className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
+                      >
+                        <span>
+                          Located {boardLocation.jobId} on Page {boardLocation.page}, Row {boardLocation.row}.
+                        </span>
+                        <span className="shrink-0">Highlighted below</span>
+                      </div>
+                    )}
+
                     {statusJobs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                         {paginatedStatusJobs.map((job) => (
                           <button
                             type="button"
                             key={job.jobId}
+                            data-board-status={encodeURIComponent(status)}
+                            data-board-job-id={encodeURIComponent(job.jobId)}
                             onClick={() => openJobDetails(job)}
-                            className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:p-4"
+                            className={`min-w-0 rounded-xl border bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:p-4 ${
+                              boardLocation?.jobId === job.jobId
+                                ? "border-amber-400 ring-4 ring-amber-300/70 shadow-lg"
+                                : "border-slate-200"
+                            }`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="whitespace-pre-wrap break-words text-xs font-semibold text-blue-600">
