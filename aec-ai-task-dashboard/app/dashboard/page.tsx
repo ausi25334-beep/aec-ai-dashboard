@@ -2064,37 +2064,30 @@ export default function DashboardPage() {
     [jobs],
   );
 
-  const filteredJobs = useMemo(
+  /*
+    Search results are intentionally kept separate from the dashboard data.
+    Searching must never change cards, charts, calendar, boards, summary, or
+    the information sheet; it only powers the header result count/list.
+  */
+  const searchResults = useMemo(
     () =>
       orderedJobs.filter((job) => jobMatchesGlobalSearch(job, globalSearch)),
     [orderedJobs, globalSearch],
   );
 
   const searchSuggestions = useMemo(
-    () => (globalSearch.trim() ? filteredJobs.slice(0, 10) : []),
-    [filteredJobs, globalSearch],
+    () => (globalSearch.trim() ? searchResults : []),
+    [searchResults, globalSearch],
   );
 
   useEffect(() => {
     setActiveSearchSuggestion(-1);
   }, [globalSearch]);
 
-  useEffect(() => {
-    setBoardPagination((current) =>
-      JOB_STATUSES.reduce(
-        (next, status) => {
-          next[status] = { ...current[status], page: 1 };
-          return next;
-        },
-        {} as BoardPaginationState,
-      ),
-    );
-  }, [globalSearch]);
-
   const statusCounts = useMemo(() => {
     return JOB_STATUSES.reduce(
       (counts, status) => {
-        counts[status] = filteredJobs.filter(
+        counts[status] = orderedJobs.filter(
           (job) => job.status === status,
         ).length;
 
@@ -2102,7 +2095,7 @@ export default function DashboardPage() {
       },
       {} as Record<BoardJobStatus, number>,
     );
-  }, [filteredJobs]);
+  }, [orderedJobs]);
 
   const statisticCards = JOB_STATUSES.map((status) => ({
     status,
@@ -2122,13 +2115,13 @@ export default function DashboardPage() {
     return weekKeys.map((dateKey, index) => ({
       label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
       dateKey,
-      value: filteredJobs.filter(
+      value: orderedJobs.filter(
         (job) => getJobDateKey(job.jobInDateTime) === dateKey,
       ).length,
     }));
-  }, [filteredJobs, today]);
+  }, [orderedJobs, today]);
 
-  const todayJobCount = filteredJobs.filter(
+  const todayJobCount = orderedJobs.filter(
     (job) => getJobDateKey(job.jobInDateTime) === formatDateKey(today),
   ).length;
 
@@ -2253,8 +2246,8 @@ export default function DashboardPage() {
 
               {globalSearch.trim() && (
                 <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center whitespace-nowrap text-[10px] font-semibold text-blue-600">
-                  {filteredJobs.length} result
-                  {filteredJobs.length === 1 ? "" : "s"}
+                  {searchResults.length} result
+                  {searchResults.length === 1 ? "" : "s"}
                 </span>
               )}
 
@@ -2467,7 +2460,7 @@ export default function DashboardPage() {
 
               <div className="grid grid-cols-7 gap-1">
                 {calendarDays.map((calendarDay) => {
-                  const dayJobs = filteredJobs.filter((job) =>
+                  const dayJobs = orderedJobs.filter((job) =>
                     isJobScheduledOnDate(job, calendarDay.dateKey),
                   );
 
@@ -2543,7 +2536,7 @@ export default function DashboardPage() {
         {/* Job Information Sheet */}
 
         <JobDataTable
-          jobs={filteredJobs}
+          jobs={orderedJobs}
           columnOrder={settings.columnOrder}
           onOpenJob={openJobDetails}
         />
@@ -2618,7 +2611,7 @@ export default function DashboardPage() {
                   </span>
 
                   <span className="text-sm font-bold text-slate-950">
-                    {filteredJobs.length}
+                    {orderedJobs.length}
                   </span>
                 </div>
               </div>
@@ -2629,7 +2622,7 @@ export default function DashboardPage() {
 
           <div className="mt-5 space-y-5">
             {JOB_STATUSES.map((status) => {
-              const statusJobs = filteredJobs.filter(
+              const statusJobs = orderedJobs.filter(
                 (job) => job.status === status,
               );
               const styles = statusStyles[status];
