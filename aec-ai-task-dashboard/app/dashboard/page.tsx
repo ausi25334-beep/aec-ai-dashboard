@@ -1560,7 +1560,9 @@ function compareJobsByNewest(a: Job, b: Job) {
 }
 
 function jobMatchesGlobalSearch(job: Job, query: string) {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const normalizeSearchText = (value: unknown) =>
+    String(value ?? "").normalize("NFKC").toLocaleLowerCase();
+  const normalizedQuery = normalizeSearchText(query.trim());
 
   if (!normalizedQuery) return true;
 
@@ -1575,35 +1577,22 @@ function jobMatchesGlobalSearch(job: Job, query: string) {
     Cancelled: "cancelled canceled cancel",
     Complete: "complete completed",
   };
+  /*
+    Search suggestions show "Job ID - Customer Company Name", so matching is
+    intentionally limited to fields the user can see and verify there, plus
+    Status for the dashboard's status search. This is a literal, contiguous,
+    case-insensitive match (Ctrl+F behaviour), not fuzzy/token matching.
+  */
   const searchableValues = [
     job.jobId,
-    job.jobInDateTime,
-    job.jobStartDateTime,
-    job.jobCompleteDateTime,
-    job.collectionDateTime,
-    job.salesPerson,
-    job.salesPersonPhone,
-    job.customerName,
-    job.customerPhone,
     job.customerCompanyName,
-    job.assignedTechnician,
-    job.technicianPhone,
-    job.description,
-    job.statusRemark,
-    job.invoiceNo,
-    job.reportNo,
     displayLabels[job.status],
     statusAliases[job.status],
   ];
-  const searchableText = searchableValues
-    .filter(Boolean)
-    .join(" ")
-    .toLocaleLowerCase();
 
-  return normalizedQuery
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((term) => searchableText.includes(term));
+  return searchableValues.some((value) =>
+    normalizeSearchText(value).includes(normalizedQuery),
+  );
 }
 
 function getCalendarCompanyFontSize(companyName?: string) {
@@ -2303,7 +2292,7 @@ export default function DashboardPage() {
                     ))
                   ) : (
                     <p className="px-3 py-3 text-sm text-slate-400">
-                      No matching jobs
+                      Not Found
                     </p>
                   )}
                 </div>
