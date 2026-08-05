@@ -55,10 +55,56 @@ type BoardPaginationState = Record<
   { page: number; pageSize: PageSize }
 >;
 
-function createDefaultBoardPagination(): BoardPaginationState {
+type PaginationAreaKey = "job-information-sheet" | BoardJobStatus;
+type SavedPaginationDefaults = Partial<Record<PaginationAreaKey, PageSize>>;
+
+const PAGINATION_DEFAULTS_STORAGE_KEY =
+  "aec-dashboard-pagination-defaults-v1";
+
+function isPageSize(value: unknown): value is PageSize {
+  return PAGE_SIZE_OPTIONS.includes(value as PageSize);
+}
+
+function readPaginationDefaults(): SavedPaginationDefaults {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(PAGINATION_DEFAULTS_STORAGE_KEY) || "{}",
+    ) as Record<string, unknown>;
+    const normalized: SavedPaginationDefaults = {};
+
+    (["job-information-sheet", ...JOB_STATUSES] as PaginationAreaKey[]).forEach(
+      (area) => {
+        if (isPageSize(parsed[area])) normalized[area] = parsed[area];
+      },
+    );
+
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+function savePaginationDefault(area: PaginationAreaKey, pageSize: PageSize) {
+  try {
+    const current = readPaginationDefaults();
+    window.localStorage.setItem(
+      PAGINATION_DEFAULTS_STORAGE_KEY,
+      JSON.stringify({ ...current, [area]: pageSize }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function createDefaultBoardPagination(
+  defaults: SavedPaginationDefaults = {},
+): BoardPaginationState {
   return JOB_STATUSES.reduce(
     (state, status) => {
-      state[status] = { page: 1, pageSize: 10 };
+      state[status] = { page: 1, pageSize: defaults[status] ?? 10 };
       return state;
     },
     {} as BoardPaginationState,
@@ -703,6 +749,19 @@ function JobDataTable({
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    const savedDefault = readPaginationDefaults()["job-information-sheet"];
+
+    if (savedDefault) {
+      setPageSize(savedDefault);
+      setPage(1);
+    }
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [jobs]);
   const visibleColumns = columnOrder.filter(
     (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
   );
@@ -816,6 +875,9 @@ function JobDataTable({
         onPrevious={() => setPage(Math.max(1, safePage - 1))}
         onNext={() => setPage(Math.min(totalPages, safePage + 1))}
         onPageChange={setPage}
+        onSetAsDefault={() =>
+          savePaginationDefault("job-information-sheet", pageSize)
+        }
       />
     </section>
   );
@@ -892,6 +954,7 @@ function PaginationControls({
   onPrevious,
   onNext,
   onPageChange,
+  onSetAsDefault,
 }: {
   page: number;
   totalPages: number;
@@ -900,12 +963,21 @@ function PaginationControls({
   onPrevious: () => void;
   onNext: () => void;
   onPageChange: (page: number) => void;
+  onSetAsDefault: () => boolean;
 }) {
   const [pageInput, setPageInput] = useState(String(page));
+  const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
     setPageInput(String(page));
   }, [page, totalPages]);
+
+  useEffect(() => {
+    if (!saveMessage) return;
+
+    const timer = window.setTimeout(() => setSaveMessage(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [saveMessage]);
 
   function commitPageInput() {
     const requestedPage = Number.parseInt(pageInput, 10);
@@ -924,21 +996,51 @@ function PaginationControls({
           const isSelected = option === pageSize;
 
           return (
-            <button
-              type="button"
-              key={String(option)}
-              onClick={() => onPageSizeChange(option)}
-              className={`h-8 min-w-9 rounded-lg border px-2.5 text-xs font-semibold transition ${
-                isSelected
-                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-              }`}
-              aria-pressed={isSelected}
-            >
-              {option}
-            </button>
+            <div key={String(option)} className="contents">
+              <button
+                type="button"
+                onClick={() => onPageSizeChange(option)}
+                className={`h-8 min-w-9 rounded-lg border px-2.5 text-xs font-semibold transition ${
+                  isSelected
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                }`}
+                aria-pressed={isSelected}
+              >
+                {option}
+              </button>
+
+              {option === 10 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSaveMessage(
+                      onSetAsDefault()
+                        ? "Save successfully"
+                        : "Unable to save",
+                    );
+                  }}
+                  className="h-8 whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-3 text-[11px] font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100"
+                >
+                  Set as Default
+                </button>
+              )}
+            </div>
           );
         })}
+
+        {saveMessage && (
+          <span
+            className={`whitespace-nowrap px-1 text-[11px] font-semibold ${
+              saveMessage === "Save successfully"
+                ? "text-emerald-600"
+                : "text-rose-600"
+            }`}
+            role="status"
+          >
+            {saveMessage}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -1462,6 +1564,53 @@ function compareJobsByNewest(a: Job, b: Job) {
   });
 }
 
+function jobMatchesGlobalSearch(job: Job, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  if (!normalizedQuery) return true;
+
+  const statusAliases: Record<JobStatus, string> = {
+    "New Jobs": "new job new jobs",
+    "Pending Jobs": "pending job pending jobs",
+    "In Progress": "in progress progressing",
+    "Claim Warranty": "claim warranty warranty",
+    "Pending Parts": "pending part pending parts",
+    "Pending Quotation": "pending quotation quotation quote",
+    "Pending Invoice": "pending invoice invoiced invoice",
+    Cancelled: "cancelled canceled cancel",
+    Complete: "complete completed",
+  };
+  const searchableValues = [
+    job.jobId,
+    job.jobInDateTime,
+    job.jobStartDateTime,
+    job.jobCompleteDateTime,
+    job.collectionDateTime,
+    job.salesPerson,
+    job.salesPersonPhone,
+    job.customerName,
+    job.customerPhone,
+    job.customerCompanyName,
+    job.assignedTechnician,
+    job.technicianPhone,
+    job.description,
+    job.statusRemark,
+    job.invoiceNo,
+    job.reportNo,
+    displayLabels[job.status],
+    statusAliases[job.status],
+  ];
+  const searchableText = searchableValues
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase();
+
+  return normalizedQuery
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((term) => searchableText.includes(term));
+}
+
 function getCalendarCompanyFontSize(companyName?: string) {
   const length = Array.from(companyName?.trim() || "").length;
 
@@ -1574,6 +1723,24 @@ function SettingsIcon() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 function ChevronLeftIcon() {
   return (
     <svg
@@ -1621,11 +1788,18 @@ export default function DashboardPage() {
   const [dataIsLoading, setDataIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [globalSearch, setGlobalSearch] = useState("");
   const [boardPagination, setBoardPagination] =
     useState<BoardPaginationState>(createDefaultBoardPagination);
 
   const [today] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
+
+  useEffect(() => {
+    setBoardPagination(
+      createDefaultBoardPagination(readPaginationDefaults()),
+    );
+  }, []);
 
   useEffect(() => {
     if (!selectedJob) return;
@@ -1904,16 +2078,36 @@ export default function DashboardPage() {
     [jobs],
   );
 
+  const filteredJobs = useMemo(
+    () =>
+      orderedJobs.filter((job) => jobMatchesGlobalSearch(job, globalSearch)),
+    [orderedJobs, globalSearch],
+  );
+
+  useEffect(() => {
+    setBoardPagination((current) =>
+      JOB_STATUSES.reduce(
+        (next, status) => {
+          next[status] = { ...current[status], page: 1 };
+          return next;
+        },
+        {} as BoardPaginationState,
+      ),
+    );
+  }, [globalSearch]);
+
   const statusCounts = useMemo(() => {
     return JOB_STATUSES.reduce(
       (counts, status) => {
-        counts[status] = jobs.filter((job) => job.status === status).length;
+        counts[status] = filteredJobs.filter(
+          (job) => job.status === status,
+        ).length;
 
         return counts;
       },
       {} as Record<BoardJobStatus, number>,
     );
-  }, [jobs]);
+  }, [filteredJobs]);
 
   const statisticCards = JOB_STATUSES.map((status) => ({
     status,
@@ -1933,12 +2127,13 @@ export default function DashboardPage() {
     return weekKeys.map((dateKey, index) => ({
       label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
       dateKey,
-      value: jobs.filter((job) => getJobDateKey(job.jobInDateTime) === dateKey)
-        .length,
+      value: filteredJobs.filter(
+        (job) => getJobDateKey(job.jobInDateTime) === dateKey,
+      ).length,
     }));
-  }, [jobs, today]);
+  }, [filteredJobs, today]);
 
-  const todayJobCount = jobs.filter(
+  const todayJobCount = filteredJobs.filter(
     (job) => getJobDateKey(job.jobInDateTime) === formatDateKey(today),
   ).length;
 
@@ -2002,7 +2197,29 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:gap-3">
+            <div className="relative order-first w-full sm:w-64 lg:w-80">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                <SearchIcon />
+              </span>
+
+              <input
+                type="search"
+                value={globalSearch}
+                onChange={(event) => setGlobalSearch(event.target.value)}
+                placeholder="Search jobs, company, status..."
+                aria-label="Global search"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-20 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+              />
+
+              {globalSearch.trim() && (
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center whitespace-nowrap text-[10px] font-semibold text-blue-600">
+                  {filteredJobs.length} result
+                  {filteredJobs.length === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-slate-800">
                 {settings.administratorName}
@@ -2171,7 +2388,7 @@ export default function DashboardPage() {
 
               <div className="grid grid-cols-7 gap-1">
                 {calendarDays.map((calendarDay) => {
-                  const dayJobs = jobs.filter((job) =>
+                  const dayJobs = filteredJobs.filter((job) =>
                     isJobScheduledOnDate(job, calendarDay.dateKey),
                   );
 
@@ -2247,7 +2464,7 @@ export default function DashboardPage() {
         {/* Job Information Sheet */}
 
         <JobDataTable
-          jobs={orderedJobs}
+          jobs={filteredJobs}
           columnOrder={settings.columnOrder}
           onOpenJob={openJobDetails}
         />
@@ -2322,7 +2539,7 @@ export default function DashboardPage() {
                   </span>
 
                   <span className="text-sm font-bold text-slate-950">
-                    {jobs.length}
+                    {filteredJobs.length}
                   </span>
                 </div>
               </div>
@@ -2333,7 +2550,7 @@ export default function DashboardPage() {
 
           <div className="mt-5 space-y-5">
             {JOB_STATUSES.map((status) => {
-              const statusJobs = orderedJobs.filter(
+              const statusJobs = filteredJobs.filter(
                 (job) => job.status === status,
               );
               const styles = statusStyles[status];
@@ -2549,6 +2766,9 @@ export default function DashboardPage() {
                           page: nextPage,
                         },
                       }))
+                    }
+                    onSetAsDefault={() =>
+                      savePaginationDefault(status, pagination.pageSize)
                     }
                   />
                 </div>
