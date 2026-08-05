@@ -992,40 +992,35 @@ function PaginationControls({
   return (
     <div className="flex flex-col items-end gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:px-5">
       <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => {
+            setSaveMessage(
+              onSetAsDefault() ? "Save successfully" : "Unable to save",
+            );
+          }}
+          className="h-8 whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-3 text-[11px] font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100"
+        >
+          Set as Default
+        </button>
+
         {PAGE_SIZE_OPTIONS.map((option) => {
           const isSelected = option === pageSize;
 
           return (
-            <div key={String(option)} className="contents">
-              <button
-                type="button"
-                onClick={() => onPageSizeChange(option)}
-                className={`h-8 min-w-9 rounded-lg border px-2.5 text-xs font-semibold transition ${
-                  isSelected
-                    ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                }`}
-                aria-pressed={isSelected}
-              >
-                {option}
-              </button>
-
-              {option === 10 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSaveMessage(
-                      onSetAsDefault()
-                        ? "Save successfully"
-                        : "Unable to save",
-                    );
-                  }}
-                  className="h-8 whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-3 text-[11px] font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100"
-                >
-                  Set as Default
-                </button>
-              )}
-            </div>
+            <button
+              key={String(option)}
+              type="button"
+              onClick={() => onPageSizeChange(option)}
+              className={`h-8 min-w-9 rounded-lg border px-2.5 text-xs font-semibold transition ${
+                isSelected
+                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+              }`}
+              aria-pressed={isSelected}
+            >
+              {option}
+            </button>
           );
         })}
 
@@ -1789,6 +1784,8 @@ export default function DashboardPage() {
   const [dataError, setDataError] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [searchHasFocus, setSearchHasFocus] = useState(false);
+  const [activeSearchSuggestion, setActiveSearchSuggestion] = useState(-1);
   const [boardPagination, setBoardPagination] =
     useState<BoardPaginationState>(createDefaultBoardPagination);
 
@@ -2084,6 +2081,15 @@ export default function DashboardPage() {
     [orderedJobs, globalSearch],
   );
 
+  const searchSuggestions = useMemo(
+    () => (globalSearch.trim() ? filteredJobs.slice(0, 10) : []),
+    [filteredJobs, globalSearch],
+  );
+
+  useEffect(() => {
+    setActiveSearchSuggestion(-1);
+  }, [globalSearch]);
+
   useEffect(() => {
     setBoardPagination((current) =>
       JOB_STATUSES.reduce(
@@ -2166,6 +2172,13 @@ export default function DashboardPage() {
     setSelectedJob(null);
   }
 
+  function selectSearchSuggestion(job: Job) {
+    setGlobalSearch(job.jobId);
+    setSearchHasFocus(false);
+    setActiveSearchSuggestion(-1);
+    openJobDetails(job);
+  }
+
   return (
     <main
       className={`min-h-screen bg-slate-50 ${
@@ -2207,8 +2220,45 @@ export default function DashboardPage() {
                 type="search"
                 value={globalSearch}
                 onChange={(event) => setGlobalSearch(event.target.value)}
-                placeholder="Search jobs, company, status..."
+                onFocus={() => setSearchHasFocus(true)}
+                onBlur={() => setSearchHasFocus(false)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setSearchHasFocus(false);
+                    setActiveSearchSuggestion(-1);
+                    event.currentTarget.blur();
+                    return;
+                  }
+
+                  if (!searchSuggestions.length) return;
+
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveSearchSuggestion((current) =>
+                      Math.min(searchSuggestions.length - 1, current + 1),
+                    );
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveSearchSuggestion((current) =>
+                      Math.max(-1, current - 1),
+                    );
+                  } else if (
+                    event.key === "Enter" &&
+                    activeSearchSuggestion >= 0
+                  ) {
+                    event.preventDefault();
+                    selectSearchSuggestion(
+                      searchSuggestions[activeSearchSuggestion],
+                    );
+                  }
+                }}
+                placeholder="Search jobs..."
                 aria-label="Global search"
+                aria-autocomplete="list"
+                aria-expanded={
+                  searchHasFocus && searchSuggestions.length > 0
+                }
+                aria-controls="job-search-suggestions"
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-20 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
               />
 
@@ -2217,6 +2267,46 @@ export default function DashboardPage() {
                   {filteredJobs.length} result
                   {filteredJobs.length === 1 ? "" : "s"}
                 </span>
+              )}
+
+              {searchHasFocus && globalSearch.trim() && (
+                <div
+                  id="job-search-suggestions"
+                  role="listbox"
+                  aria-label="Matching jobs"
+                  className="absolute left-0 right-0 top-[calc(100%+0.45rem)] z-50 max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+                >
+                  {searchSuggestions.length > 0 ? (
+                    searchSuggestions.map((job, index) => (
+                      <button
+                        key={`${job.jobId}-${index}`}
+                        type="button"
+                        role="option"
+                        aria-selected={index === activeSearchSuggestion}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onMouseEnter={() => setActiveSearchSuggestion(index)}
+                        onClick={() => selectSearchSuggestion(job)}
+                        className={`flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                          index === activeSearchSuggestion
+                            ? "bg-blue-50 text-blue-700"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="font-semibold text-blue-600">
+                          {job.jobId || "-"}
+                        </span>
+                        <span className="mx-2 text-slate-300">-</span>
+                        <span className="min-w-0 truncate">
+                          {job.customerCompanyName || "-"}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-3 text-sm text-slate-400">
+                      No matching jobs
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
