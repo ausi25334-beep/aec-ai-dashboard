@@ -749,10 +749,12 @@ function StatusIcon({
 
 function JobDataTable({
   jobs,
+  staffOptions,
   columnOrder,
   onOpenJob,
 }: {
   jobs: Job[];
+  staffOptions: string[];
   columnOrder: JobColumnKey[];
   onOpenJob: (job: Job) => void;
 }) {
@@ -760,6 +762,13 @@ function JobDataTable({
   const [page, setPage] = useState(1);
   const [sortColumn, setSortColumn] = useState<JobColumnKey | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [filterIsOpen, setFilterIsOpen] = useState(false);
+  const [selectedStaffFilters, setSelectedStaffFilters] = useState<string[]>(
+    [],
+  );
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<
+    BoardJobStatus[]
+  >([]);
 
   useEffect(() => {
     const savedDefault = readPaginationDefaults()["job-information-sheet"];
@@ -773,13 +782,56 @@ function JobDataTable({
   useEffect(() => {
     setPage(1);
   }, [jobs]);
+
+  useEffect(() => {
+    setSelectedStaffFilters((current) =>
+      current.filter((selectedName) =>
+        staffOptions.some(
+          (staffName) =>
+            staffName.toLocaleLowerCase() === selectedName.toLocaleLowerCase(),
+        ),
+      ),
+    );
+  }, [staffOptions]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedStaffFilters, selectedStatusFilters]);
+
   const visibleColumns = columnOrder.filter(
     (column) => !HIDDEN_JOB_PHONE_COLUMNS.has(column),
   );
-  const sortedJobs = useMemo(() => {
-    if (!sortColumn) return jobs;
 
-    return jobs
+  const filteredJobs = useMemo(() => {
+    return jobs.filter((job) => {
+      const staffMatches =
+        selectedStaffFilters.length === 0 ||
+        selectedStaffFilters.some((selectedName) => {
+          const normalizedName = selectedName.trim().toLocaleLowerCase();
+
+          return (
+            job.salesPerson
+              .trim()
+              .toLocaleLowerCase()
+              .includes(normalizedName) ||
+            job.assignedTechnician
+              .trim()
+              .toLocaleLowerCase()
+              .includes(normalizedName)
+          );
+        });
+      const statusMatches =
+        selectedStatusFilters.length === 0 ||
+        selectedStatusFilters.includes(job.status as BoardJobStatus);
+
+      return staffMatches && statusMatches;
+    });
+  }, [jobs, selectedStaffFilters, selectedStatusFilters]);
+
+  const sortedJobs = useMemo(() => {
+    if (!sortColumn) return filteredJobs;
+
+    return filteredJobs
       .map((job, originalIndex) => ({ job, originalIndex }))
       .sort((a, b) => {
         const comparison = compareJobsByColumn(
@@ -792,7 +844,31 @@ function JobDataTable({
         return comparison || a.originalIndex - b.originalIndex;
       })
       .map(({ job }) => job);
-  }, [jobs, sortColumn, sortDirection]);
+  }, [filteredJobs, sortColumn, sortDirection]);
+
+  const activeFilterCount =
+    selectedStaffFilters.length + selectedStatusFilters.length;
+
+  function toggleStaffFilter(staffName: string) {
+    setSelectedStaffFilters((current) =>
+      current.includes(staffName)
+        ? current.filter((name) => name !== staffName)
+        : [...current, staffName],
+    );
+  }
+
+  function toggleStatusFilter(status: BoardJobStatus) {
+    setSelectedStatusFilters((current) =>
+      current.includes(status)
+        ? current.filter((selectedStatus) => selectedStatus !== status)
+        : [...current, status],
+    );
+  }
+
+  function clearTableFilters() {
+    setSelectedStaffFilters([]);
+    setSelectedStatusFilters([]);
+  }
 
   function changeSort(column: JobColumnKey) {
     setPage(1);
@@ -816,7 +892,7 @@ function JobDataTable({
       : sortedJobs.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
-    <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="mt-5 rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5">
         <div>
           <h2 className="text-lg font-semibold text-slate-950">
@@ -829,8 +905,125 @@ function JobDataTable({
         </div>
 
         <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
-          {jobs.length} {jobs.length === 1 ? "Job" : "Jobs"}
+          {filteredJobs.length} {filteredJobs.length === 1 ? "Job" : "Jobs"}
         </span>
+      </div>
+
+      <div className="relative z-30 flex min-h-14 items-center justify-end border-b border-slate-100 bg-white px-4 py-2.5 sm:px-5">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setFilterIsOpen((current) => !current)}
+            aria-expanded={filterIsOpen}
+            aria-controls="job-information-filter-panel"
+            className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-blue-500/10 ${
+              activeFilterCount > 0
+                ? "border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+            }`}
+          >
+            <FilterIcon />
+            <span>Filter</span>
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-blue-700">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {filterIsOpen && (
+            <div
+              id="job-information-filter-panel"
+              className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(44rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setFilterIsOpen(false);
+              }}
+            >
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Staff
+                    </p>
+                    <span className="text-[11px] font-medium text-slate-400">
+                      Salesperson or Engineer
+                    </span>
+                  </div>
+
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                    {staffOptions.length > 0 ? (
+                      staffOptions.map((staffName) => (
+                        <label
+                          key={staffName}
+                          className="flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-slate-700 transition hover:bg-blue-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedStaffFilters.includes(staffName)}
+                            onChange={() => toggleStaffFilter(staffName)}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                          />
+                          <span className="min-w-0 break-words font-medium">
+                            {staffName}
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-400">
+                        No staff available
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-3 text-sm font-semibold text-slate-900">
+                    Status
+                  </p>
+
+                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+                    {JOB_STATUSES.map((status) => (
+                      <label
+                        key={status}
+                        className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-xs font-semibold transition hover:brightness-95 ${statusStyles[status].calendar}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStatusFilters.includes(status)}
+                          onChange={() => toggleStatusFilter(status)}
+                          className="h-4 w-4 shrink-0 rounded border-current accent-blue-600"
+                        />
+                        <span
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
+                        />
+                        <span>{displayLabels[status]}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                <button
+                  type="button"
+                  onClick={clearTableFilters}
+                  disabled={activeFilterCount === 0}
+                  className="h-9 rounded-lg px-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear All
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterIsOpen(false)}
+                  className="h-9 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -919,7 +1112,9 @@ function JobDataTable({
                   colSpan={visibleColumns.length}
                   className="px-5 py-12 text-center text-sm text-slate-400"
                 >
-                  No job records available
+                  {activeFilterCount > 0
+                    ? "No job records match the selected filters"
+                    : "No job records available"}
                 </td>
               </tr>
             )}
@@ -1847,6 +2042,25 @@ function SearchIcon() {
     >
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M4 6h16" />
+      <path d="M7 12h10" />
+      <path d="M10 18h4" />
     </svg>
   );
 }
@@ -2808,6 +3022,7 @@ export default function DashboardPage() {
 
         <JobDataTable
           jobs={orderedJobs}
+          staffOptions={staffFilterOptions}
           columnOrder={settings.columnOrder}
           onOpenJob={openJobDetails}
         />
