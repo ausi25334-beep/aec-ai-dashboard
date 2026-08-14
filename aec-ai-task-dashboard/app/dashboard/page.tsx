@@ -1895,6 +1895,7 @@ export default function DashboardPage() {
   const [signingOut, setSigningOut] = useState(false);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [selectedEngineer, setSelectedEngineer] = useState("");
   const [dataIsLoading, setDataIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -2201,6 +2202,68 @@ export default function DashboardPage() {
   );
 
   /*
+    Engineer options come directly from the staff dictionary. Names are
+    de-duplicated case-insensitively while preserving their display spelling.
+  */
+  const engineerOptions = useMemo(() => {
+    const seenNames = new Set<string>();
+
+    return staff
+      .map((staffMember) => staffMember.name.trim())
+      .filter((name) => {
+        if (!name) return false;
+
+        const normalizedName = name.toLocaleLowerCase();
+        if (seenNames.has(normalizedName)) return false;
+
+        seenNames.add(normalizedName);
+        return true;
+      });
+  }, [staff]);
+
+  /*
+    This filter belongs only to Summary and Job Progress Board. It does not
+    change the main dashboard cards, charts, calendar, global search, or Job
+    Information Sheet. Matching is a case-insensitive "contains" check, so
+    selecting Hong also includes Hong LaLa / Hong lala.
+  */
+  const engineerFilteredBoardJobs = useMemo(() => {
+    const normalizedEngineer = selectedEngineer.trim().toLocaleLowerCase();
+    if (!normalizedEngineer) return orderedJobs;
+
+    return orderedJobs.filter((job) =>
+      job.assignedTechnician
+        .trim()
+        .toLocaleLowerCase()
+        .includes(normalizedEngineer),
+    );
+  }, [orderedJobs, selectedEngineer]);
+
+  useEffect(() => {
+    if (
+      selectedEngineer &&
+      !engineerOptions.some(
+        (name) =>
+          name.toLocaleLowerCase() === selectedEngineer.toLocaleLowerCase(),
+      )
+    ) {
+      setSelectedEngineer("");
+    }
+  }, [engineerOptions, selectedEngineer]);
+
+  useEffect(() => {
+    setBoardPagination((current) =>
+      JOB_STATUSES.reduce((nextState, status) => {
+        nextState[status] = { ...current[status], page: 1 };
+        return nextState;
+      }, {} as BoardPaginationState),
+    );
+    setBoardSearch(createDefaultBoardSearch());
+    setFocusedBoardSearch(null);
+    setHighlightedBoardJob(null);
+  }, [selectedEngineer]);
+
+  /*
     Search results are intentionally kept separate from the dashboard data.
     Searching must never change cards, charts, calendar, boards, summary, or
     the information sheet; it only powers the header result count/list.
@@ -2260,6 +2323,19 @@ export default function DashboardPage() {
       {} as Record<BoardJobStatus, number>,
     );
   }, [orderedJobs]);
+
+  const boardStatusCounts = useMemo(() => {
+    return JOB_STATUSES.reduce(
+      (counts, status) => {
+        counts[status] = engineerFilteredBoardJobs.filter(
+          (job) => job.status === status,
+        ).length;
+
+        return counts;
+      },
+      {} as Record<BoardJobStatus, number>,
+    );
+  }, [engineerFilteredBoardJobs]);
 
   const statisticCards = JOB_STATUSES.map((status) => ({
     status,
@@ -2732,7 +2808,7 @@ export default function DashboardPage() {
         {/* Job Progress Board */}
 
         <section className="mt-8">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-col gap-4 min-[1750px]:flex-row min-[1750px]:items-end min-[1750px]:justify-between">
             <div className="shrink-0">
               <h2 className="text-lg font-semibold text-slate-950">
                 Job Progress Board
@@ -2745,17 +2821,17 @@ export default function DashboardPage() {
             </div>
 
             {settings.showStageLegend && (
-              <div className="w-full max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:w-fit">
-                <div className="min-w-max">
+              <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 min-[1750px]:ml-auto min-[1750px]:max-w-[68rem] min-[1750px]:flex-1">
+                <div>
                   <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     Stage Legend
                   </p>
 
-                  <div className="mt-2 flex flex-nowrap items-center justify-start gap-x-4 xl:justify-end">
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 min-[1750px]:grid-cols-8">
                     {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
-                        className="flex shrink-0 items-center gap-2"
+                        className="flex min-w-0 items-center gap-2"
                       >
                         <span
                           className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
@@ -2776,22 +2852,43 @@ export default function DashboardPage() {
 
           {settings.showSummary && (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-                <p className="text-sm font-semibold text-slate-700">Summary:</p>
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                <label className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span className="whitespace-nowrap">Filter:</span>
+                  <select
+                    value={selectedEngineer}
+                    onChange={(event) => setSelectedEngineer(event.target.value)}
+                    aria-label="Filter Job Progress Board by engineer"
+                    className="h-9 min-w-48 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                  >
+                    <option value="">All Engineers</option>
+                    {engineerOptions.map((engineerName) => (
+                      <option key={engineerName} value={engineerName}>
+                        {engineerName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-                {JOB_STATUSES.map((status) => (
-                  <div key={status} className="flex items-center gap-2">
-                    <span
-                      className={`flex min-w-7 items-center justify-center rounded-md px-2 py-1 text-xs font-bold ${statusStyles[status].numberBadge}`}
-                    >
-                      {statusCounts[status]}
-                    </span>
+                <div className="flex flex-1 flex-wrap items-center justify-start gap-x-4 gap-y-3 xl:justify-end">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Summary:
+                  </p>
 
-                    <span className="whitespace-nowrap text-xs font-medium text-slate-600">
-                      {displayLabels[status]}
-                    </span>
-                  </div>
-                ))}
+                  {JOB_STATUSES.map((status) => (
+                    <div key={status} className="flex items-center gap-2">
+                      <span
+                        className={`flex min-w-7 items-center justify-center rounded-md px-2 py-1 text-xs font-bold ${statusStyles[status].numberBadge}`}
+                      >
+                        {boardStatusCounts[status]}
+                      </span>
+
+                      <span className="whitespace-nowrap text-xs font-medium text-slate-600">
+                        {displayLabels[status]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
 
                 <div className="flex w-full items-center justify-end gap-2 border-t border-slate-200 pt-3 sm:ml-auto sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
                   <span className="text-sm font-semibold text-slate-700">
@@ -2799,7 +2896,7 @@ export default function DashboardPage() {
                   </span>
 
                   <span className="text-sm font-bold text-slate-950">
-                    {orderedJobs.length}
+                    {engineerFilteredBoardJobs.length}
                   </span>
                 </div>
               </div>
@@ -2810,7 +2907,7 @@ export default function DashboardPage() {
 
           <div className="mt-5 space-y-5">
             {JOB_STATUSES.map((status) => {
-              const statusJobs = orderedJobs.filter(
+              const statusJobs = engineerFilteredBoardJobs.filter(
                 (job) => job.status === status,
               );
               const styles = statusStyles[status];
