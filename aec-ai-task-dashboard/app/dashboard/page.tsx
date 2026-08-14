@@ -1895,7 +1895,7 @@ export default function DashboardPage() {
   const [signingOut, setSigningOut] = useState(false);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [selectedEngineer, setSelectedEngineer] = useState("");
+  const [selectedStaffName, setSelectedStaffName] = useState("");
   const [dataIsLoading, setDataIsLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -2202,10 +2202,10 @@ export default function DashboardPage() {
   );
 
   /*
-    Engineer options come directly from the staff dictionary. Names are
+    Filter options come directly from the staff dictionary. Names are
     de-duplicated case-insensitively while preserving their display spelling.
   */
-  const engineerOptions = useMemo(() => {
+  const staffFilterOptions = useMemo(() => {
     const seenNames = new Set<string>();
 
     return staff
@@ -2222,34 +2222,41 @@ export default function DashboardPage() {
   }, [staff]);
 
   /*
-    This filter belongs only to Summary and Job Progress Board. It does not
-    change the main dashboard cards, charts, calendar, global search, or Job
-    Information Sheet. Matching is a case-insensitive "contains" check, so
-    selecting Hong also includes Hong LaLa / Hong lala.
+    This staff filter belongs only to Summary and Job Progress Board. It does
+    not change the main dashboard cards, charts, calendar, global search, or
+    Job Information Sheet. A job matches when the selected name is contained
+    in either Sales Person OR Assigned Engineer (case-insensitive). Filtering
+    the job once also prevents duplicates when both fields contain the name.
   */
-  const engineerFilteredBoardJobs = useMemo(() => {
-    const normalizedEngineer = selectedEngineer.trim().toLocaleLowerCase();
-    if (!normalizedEngineer) return orderedJobs;
+  const staffFilteredBoardJobs = useMemo(() => {
+    const normalizedStaffName = selectedStaffName.trim().toLocaleLowerCase();
+    if (!normalizedStaffName) return orderedJobs;
 
-    return orderedJobs.filter((job) =>
-      job.assignedTechnician
+    return orderedJobs.filter((job) => {
+      const salesPersonMatches = job.salesPerson
         .trim()
         .toLocaleLowerCase()
-        .includes(normalizedEngineer),
-    );
-  }, [orderedJobs, selectedEngineer]);
+        .includes(normalizedStaffName);
+      const engineerMatches = job.assignedTechnician
+        .trim()
+        .toLocaleLowerCase()
+        .includes(normalizedStaffName);
+
+      return salesPersonMatches || engineerMatches;
+    });
+  }, [orderedJobs, selectedStaffName]);
 
   useEffect(() => {
     if (
-      selectedEngineer &&
-      !engineerOptions.some(
+      selectedStaffName &&
+      !staffFilterOptions.some(
         (name) =>
-          name.toLocaleLowerCase() === selectedEngineer.toLocaleLowerCase(),
+          name.toLocaleLowerCase() === selectedStaffName.toLocaleLowerCase(),
       )
     ) {
-      setSelectedEngineer("");
+      setSelectedStaffName("");
     }
-  }, [engineerOptions, selectedEngineer]);
+  }, [staffFilterOptions, selectedStaffName]);
 
   useEffect(() => {
     setBoardPagination((current) =>
@@ -2261,7 +2268,7 @@ export default function DashboardPage() {
     setBoardSearch(createDefaultBoardSearch());
     setFocusedBoardSearch(null);
     setHighlightedBoardJob(null);
-  }, [selectedEngineer]);
+  }, [selectedStaffName]);
 
   /*
     Search results are intentionally kept separate from the dashboard data.
@@ -2327,7 +2334,7 @@ export default function DashboardPage() {
   const boardStatusCounts = useMemo(() => {
     return JOB_STATUSES.reduce(
       (counts, status) => {
-        counts[status] = engineerFilteredBoardJobs.filter(
+        counts[status] = staffFilteredBoardJobs.filter(
           (job) => job.status === status,
         ).length;
 
@@ -2335,7 +2342,7 @@ export default function DashboardPage() {
       },
       {} as Record<BoardJobStatus, number>,
     );
-  }, [engineerFilteredBoardJobs]);
+  }, [staffFilteredBoardJobs]);
 
   const statisticCards = JOB_STATUSES.map((status) => ({
     status,
@@ -2856,15 +2863,15 @@ export default function DashboardPage() {
                 <label className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="whitespace-nowrap">Filter:</span>
                   <select
-                    value={selectedEngineer}
-                    onChange={(event) => setSelectedEngineer(event.target.value)}
-                    aria-label="Filter Job Progress Board by engineer"
+                    value={selectedStaffName}
+                    onChange={(event) => setSelectedStaffName(event.target.value)}
+                    aria-label="Filter Job Progress Board by salesperson or engineer"
                     className="h-9 w-44 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
                   >
-                    <option value="">All Engineers</option>
-                    {engineerOptions.map((engineerName) => (
-                      <option key={engineerName} value={engineerName}>
-                        {engineerName}
+                    <option value="">All Staff</option>
+                    {staffFilterOptions.map((staffName) => (
+                      <option key={staffName} value={staffName}>
+                        {staffName}
                       </option>
                     ))}
                   </select>
@@ -2899,7 +2906,7 @@ export default function DashboardPage() {
                   </span>
 
                   <span className="text-sm font-bold text-slate-950">
-                    {engineerFilteredBoardJobs.length}
+                    {staffFilteredBoardJobs.length}
                   </span>
                 </div>
               </div>
@@ -2910,7 +2917,7 @@ export default function DashboardPage() {
 
           <div className="mt-5 space-y-5">
             {JOB_STATUSES.map((status) => {
-              const statusJobs = engineerFilteredBoardJobs.filter(
+              const statusJobs = staffFilteredBoardJobs.filter(
                 (job) => job.status === status,
               );
               const styles = statusStyles[status];
