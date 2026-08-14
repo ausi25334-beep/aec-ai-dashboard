@@ -2808,7 +2808,7 @@ export default function DashboardPage() {
         {/* Job Progress Board */}
 
         <section className="mt-8">
-          <div className="flex flex-col gap-4 min-[1750px]:flex-row min-[1750px]:items-end min-[1750px]:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="shrink-0">
               <h2 className="text-lg font-semibold text-slate-950">
                 Job Progress Board
@@ -2821,17 +2821,17 @@ export default function DashboardPage() {
             </div>
 
             {settings.showStageLegend && (
-              <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 min-[1750px]:ml-auto min-[1750px]:max-w-[68rem] min-[1750px]:flex-1">
+              <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:max-w-[68rem] xl:flex-1">
                 <div>
                   <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     Stage Legend
                   </p>
 
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 min-[1750px]:grid-cols-8">
+                  <div className="mt-2 flex flex-wrap items-center justify-start gap-x-3 gap-y-2 xl:flex-nowrap xl:justify-between">
                     {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
-                        className="flex min-w-0 items-center gap-2"
+                        className="flex shrink-0 items-center gap-2"
                       >
                         <span
                           className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
@@ -2852,14 +2852,14 @@ export default function DashboardPage() {
 
           {settings.showSummary && (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+              <div className="flex flex-col gap-3 2xl:flex-row 2xl:flex-nowrap 2xl:items-center">
                 <label className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="whitespace-nowrap">Filter:</span>
                   <select
                     value={selectedEngineer}
                     onChange={(event) => setSelectedEngineer(event.target.value)}
                     aria-label="Filter Job Progress Board by engineer"
-                    className="h-9 min-w-48 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                    className="h-9 w-44 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
                   >
                     <option value="">All Engineers</option>
                     {engineerOptions.map((engineerName) => (
@@ -2870,13 +2870,16 @@ export default function DashboardPage() {
                   </select>
                 </label>
 
-                <div className="flex flex-1 flex-wrap items-center justify-start gap-x-4 gap-y-3 xl:justify-end">
-                  <p className="text-sm font-semibold text-slate-700">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-x-3 gap-y-3 2xl:flex-nowrap 2xl:justify-end">
+                  <p className="shrink-0 text-sm font-semibold text-slate-700">
                     Summary:
                   </p>
 
                   {JOB_STATUSES.map((status) => (
-                    <div key={status} className="flex items-center gap-2">
+                    <div
+                      key={status}
+                      className="flex shrink-0 items-center gap-2"
+                    >
                       <span
                         className={`flex min-w-7 items-center justify-center rounded-md px-2 py-1 text-xs font-bold ${statusStyles[status].numberBadge}`}
                       >
@@ -2890,7 +2893,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
 
-                <div className="flex w-full items-center justify-end gap-2 border-t border-slate-200 pt-3 sm:ml-auto sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                <div className="flex w-full shrink-0 items-center justify-end gap-2 border-t border-slate-200 pt-3 sm:ml-auto sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
                   <span className="text-sm font-semibold text-slate-700">
                     Total:
                   </span>
