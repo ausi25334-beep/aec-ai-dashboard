@@ -18,6 +18,7 @@ const JOB_COLUMN_KEYS = [
   "customerPhone",
   "description",
   "statusRemark",
+  "maintenanceDuration",
   "reportNo",
   "invoiceNo",
   "collectionDateTime",
@@ -40,6 +41,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   description: "Description / Item",
   status: "Status",
   statusRemark: "Status Remark / Issue",
+  maintenanceDuration: "Maintenance Duration",
   jobCompleteDateTime: "Job Complete Date & Time",
   invoiceNo: "Invoice No.",
   reportNo: "Report No.",
@@ -58,15 +60,30 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
-  return [
+  const normalized = [
     ...uniqueSavedKeys,
     ...JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
   ];
+
+  if (!uniqueSavedKeys.includes("maintenanceDuration")) {
+    const currentIndex = normalized.indexOf("maintenanceDuration");
+    if (currentIndex !== -1) normalized.splice(currentIndex, 1);
+    const reportIndex = normalized.indexOf("reportNo");
+    normalized.splice(
+      reportIndex === -1 ? normalized.length : reportIndex,
+      0,
+      "maintenanceDuration",
+    );
+  }
+
+  return normalized;
 }
 
 const JOB_STATUSES = [
   "New Jobs",
   "Pending Jobs",
+  "Pending Customer Replies",
+  "Maintenance and Renewals",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -80,7 +97,9 @@ type BoardJobStatus = (typeof JOB_STATUSES)[number];
 const DEFAULT_STATISTIC_CARD_ORDER: BoardJobStatus[] = [
   "New Jobs",
   "Pending Jobs",
+  "Pending Customer Replies",
   "Complete",
+  "Maintenance and Renewals",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -115,6 +134,8 @@ const DASHBOARD_MODULE_LABELS: Record<DashboardModuleKey, string> = {
 const STATUS_CARD_LABELS: Record<BoardJobStatus, string> = {
   "New Jobs": "New Jobs",
   "Pending Jobs": "Pending Jobs",
+  "Pending Customer Replies": "Pending Customer Replies",
+  "Maintenance and Renewals": "Maintenance and Renewals",
   "Claim Warranty": "Claim Warranty",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
@@ -140,6 +161,46 @@ function normalizeOrderedKeys<T extends string>(
     ...uniqueSavedKeys,
     ...validKeys.filter((key) => !uniqueSavedKeys.includes(key)),
   ];
+}
+
+function normalizeStatisticCardOrder(value: unknown): BoardJobStatus[] {
+  const normalized = normalizeOrderedKeys(
+    value,
+    DEFAULT_STATISTIC_CARD_ORDER,
+  );
+
+  const insertRelativeTo = (
+    status: BoardJobStatus,
+    anchor: BoardJobStatus,
+    position: "before" | "after",
+  ) => {
+    const currentIndex = normalized.indexOf(status);
+    const anchorIndex = normalized.indexOf(anchor);
+
+    if (currentIndex === -1 || anchorIndex === -1) return;
+    if (Array.isArray(value) && value.includes(status)) return;
+
+    normalized.splice(currentIndex, 1);
+    const updatedAnchorIndex = normalized.indexOf(anchor);
+    normalized.splice(
+      position === "before" ? updatedAnchorIndex : updatedAnchorIndex + 1,
+      0,
+      status,
+    );
+  };
+
+  insertRelativeTo(
+    "Pending Customer Replies",
+    "Pending Jobs",
+    "after",
+  );
+  insertRelativeTo(
+    "Maintenance and Renewals",
+    "Claim Warranty",
+    "before",
+  );
+
+  return normalized;
 }
 
 type DashboardSettings = {
@@ -286,9 +347,8 @@ function mergePersistedDashboardLayout(
       layout.dashboardModuleOrder ?? settings.dashboardModuleOrder,
       DASHBOARD_MODULE_KEYS,
     ),
-    statisticCardOrder: normalizeOrderedKeys(
+    statisticCardOrder: normalizeStatisticCardOrder(
       layout.statisticCardOrder ?? settings.statisticCardOrder,
-      DEFAULT_STATISTIC_CARD_ORDER,
     ),
   };
 }
@@ -336,9 +396,8 @@ function normalizeSettings(value: unknown): DashboardSettings {
       sharedLayout?.dashboardModuleOrder ?? saved.dashboardModuleOrder,
       DASHBOARD_MODULE_KEYS,
     ),
-    statisticCardOrder: normalizeOrderedKeys(
+    statisticCardOrder: normalizeStatisticCardOrder(
       sharedLayout?.statisticCardOrder ?? saved.statisticCardOrder,
-      DEFAULT_STATISTIC_CARD_ORDER,
     ),
   };
 }
@@ -1271,7 +1330,7 @@ export default function SettingsPage() {
                     </h3>
                     <p className="mt-1 text-sm text-slate-500">
                       Reorder the New Jobs, Pending Jobs, Completed and other
-                      statistic cards. The first three cards use the top row.
+                      statistic cards. The first four cards use the top row.
                     </p>
                   </div>
 

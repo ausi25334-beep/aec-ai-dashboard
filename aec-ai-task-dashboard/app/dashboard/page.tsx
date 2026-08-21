@@ -14,6 +14,8 @@ import { createClient } from "@supabase/supabase-js";
 const JOB_STATUSES = [
   "New Jobs",
   "Pending Jobs",
+  "Pending Customer Replies",
+  "Maintenance and Renewals",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -28,10 +30,12 @@ type JobStatus = BoardJobStatus | "In Progress";
 const TOP_STATUSES: readonly BoardJobStatus[] = [
   "New Jobs",
   "Pending Jobs",
+  "Pending Customer Replies",
   "Complete",
 ];
 
 const SECOND_ROW_STATUSES: readonly BoardJobStatus[] = [
+  "Maintenance and Renewals",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -104,9 +108,54 @@ function normalizeOrderedKeys<T extends string>(
   ];
 }
 
+function normalizeStatisticCardOrder(value: unknown): BoardJobStatus[] {
+  const normalized = normalizeOrderedKeys(
+    value,
+    DEFAULT_STATISTIC_CARD_ORDER,
+  );
+
+  const insertRelativeTo = (
+    status: BoardJobStatus,
+    anchor: BoardJobStatus,
+    position: "before" | "after",
+  ) => {
+    const currentIndex = normalized.indexOf(status);
+    const anchorIndex = normalized.indexOf(anchor);
+
+    if (currentIndex === -1 || anchorIndex === -1) return;
+
+    const savedValueIncludesStatus =
+      Array.isArray(value) && value.includes(status);
+    if (savedValueIncludesStatus) return;
+
+    normalized.splice(currentIndex, 1);
+    const updatedAnchorIndex = normalized.indexOf(anchor);
+    normalized.splice(
+      position === "before" ? updatedAnchorIndex : updatedAnchorIndex + 1,
+      0,
+      status,
+    );
+  };
+
+  insertRelativeTo(
+    "Pending Customer Replies",
+    "Pending Jobs",
+    "after",
+  );
+  insertRelativeTo(
+    "Maintenance and Renewals",
+    "Claim Warranty",
+    "before",
+  );
+
+  return normalized;
+}
+
 const DISTRIBUTION_STATUSES: readonly BoardJobStatus[] = [
   "New Jobs",
   "Pending Jobs",
+  "Pending Customer Replies",
+  "Maintenance and Renewals",
   "Claim Warranty",
   "Pending Parts",
   "Pending Quotation",
@@ -205,6 +254,7 @@ type Job = {
   jobStartDateTime: string;
 
   statusRemark: string;
+  maintenanceDuration: string;
   jobCompleteDateTime: string;
 
   invoiceNo: string;
@@ -230,6 +280,7 @@ const JOB_COLUMN_KEYS = [
   "customerPhone",
   "description",
   "statusRemark",
+  "maintenanceDuration",
   "reportNo",
   "collectionDateTime",
   "assignedTechnician",
@@ -259,6 +310,7 @@ const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
   "customerPhone",
   "description",
   "statusRemark",
+  "maintenanceDuration",
   "reportNo",
   "invoiceNo",
   "collectionDateTime",
@@ -281,6 +333,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   status: "Status",
   jobStartDateTime: "Job Start Date & Time",
   statusRemark: "Status Remark / Issue",
+  maintenanceDuration: "Maintenance Duration",
   jobCompleteDateTime: "Job Complete Date & Time",
   invoiceNo: "Invoice No.",
   reportNo: "Report No.",
@@ -308,10 +361,23 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
-  return [
+  const normalized = [
     ...uniqueSavedKeys,
     ...DISPLAY_JOB_COLUMN_KEYS.filter((key) => !uniqueSavedKeys.includes(key)),
   ];
+
+  if (!uniqueSavedKeys.includes("maintenanceDuration")) {
+    const currentIndex = normalized.indexOf("maintenanceDuration");
+    if (currentIndex !== -1) normalized.splice(currentIndex, 1);
+    const reportIndex = normalized.indexOf("reportNo");
+    normalized.splice(
+      reportIndex === -1 ? normalized.length : reportIndex,
+      0,
+      "maintenanceDuration",
+    );
+  }
+
+  return normalized;
 }
 
 /* =========================================================
@@ -393,6 +459,11 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "statusRemark",
     "Status Remark / Issue",
   ],
+  maintenanceDuration: [
+    "maintenance_duration",
+    "maintenanceDuration",
+    "Maintenance Duration",
+  ],
   jobCompleteDateTime: [
     "job_complete_datetime",
     "jobCompleteDateTime",
@@ -449,6 +520,12 @@ function normalizeJobStatus(value: string): JobStatus {
     "new jobs": "New Jobs",
     "pending job": "Pending Jobs",
     "pending jobs": "Pending Jobs",
+    "pending customer reply": "Pending Customer Replies",
+    "pending customer replies": "Pending Customer Replies",
+    "maintenance and renewal": "Maintenance and Renewals",
+    "maintenance and renewals": "Maintenance and Renewals",
+    "maintenance & renewal": "Maintenance and Renewals",
+    "maintenance & renewals": "Maintenance and Renewals",
     "in progress": "In Progress",
     "claim warranty": "Claim Warranty",
     "pending invoice": "Pending Invoice",
@@ -532,6 +609,11 @@ function mapJobRow(row: SupabaseRow): Job {
       "status_remark",
       "statusRemark",
       "Status Remark / Issue",
+    ]),
+    maintenanceDuration: readText(row, [
+      "maintenance_duration",
+      "maintenanceDuration",
+      "Maintenance Duration",
     ]),
     jobCompleteDateTime: normalizeDateTime(
       readText(row, [
@@ -688,9 +770,8 @@ function mergePersistedDashboardLayout(
       layout.dashboardModuleOrder ?? settings.dashboardModuleOrder,
       DASHBOARD_MODULE_KEYS,
     ),
-    statisticCardOrder: normalizeOrderedKeys(
+    statisticCardOrder: normalizeStatisticCardOrder(
       layout.statisticCardOrder ?? settings.statisticCardOrder,
-      DEFAULT_STATISTIC_CARD_ORDER,
     ),
   };
 }
@@ -729,9 +810,8 @@ function normalizeSettings(value: unknown): DashboardSettings {
       sharedLayout?.dashboardModuleOrder ?? saved.dashboardModuleOrder,
       DASHBOARD_MODULE_KEYS,
     ),
-    statisticCardOrder: normalizeOrderedKeys(
+    statisticCardOrder: normalizeStatisticCardOrder(
       sharedLayout?.statisticCardOrder ?? saved.statisticCardOrder,
-      DEFAULT_STATISTIC_CARD_ORDER,
     ),
   };
 }
@@ -849,6 +929,27 @@ function StatusIcon({
       <svg {...commonProps}>
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+
+  if (status === "Pending Customer Replies") {
+    return (
+      <svg {...commonProps}>
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
+        <path d="M8 9h8" />
+        <path d="M8 13h5" />
+      </svg>
+    );
+  }
+
+  if (status === "Maintenance and Renewals") {
+    return (
+      <svg {...commonProps}>
+        <path d="M20 7h-5V2" />
+        <path d="M20 2v5h-5" />
+        <path d="M20 7a8 8 0 1 0 1 8" />
+        <path d="M12 8v4l3 2" />
       </svg>
     );
   }
@@ -1641,6 +1742,30 @@ const statusStyles: Record<
       "border border-pink-500 bg-pink-100 text-pink-800 shadow-sm ring-1 ring-pink-200",
     hex: "#ec4899",
   },
+  "Pending Customer Replies": {
+    dot: "bg-indigo-600",
+    badge: "bg-indigo-50 text-indigo-700",
+    numberBadge: "bg-indigo-600 text-white",
+    leftBorder: "border-l-indigo-600",
+    iconBackground: "bg-indigo-600",
+    selectFocus: "focus:border-indigo-600 focus:ring-indigo-600/10",
+    calendar: "border-indigo-300 bg-indigo-100 text-indigo-800",
+    customerBadge:
+      "border border-indigo-500 bg-indigo-100 text-indigo-800 shadow-sm ring-1 ring-indigo-200",
+    hex: "#4f46e5",
+  },
+  "Maintenance and Renewals": {
+    dot: "bg-teal-500",
+    badge: "bg-teal-50 text-teal-700",
+    numberBadge: "bg-teal-500 text-white",
+    leftBorder: "border-l-teal-500",
+    iconBackground: "bg-teal-500",
+    selectFocus: "focus:border-teal-500 focus:ring-teal-500/10",
+    calendar: "border-teal-300 bg-teal-100 text-teal-800",
+    customerBadge:
+      "border border-teal-500 bg-teal-100 text-teal-800 shadow-sm ring-1 ring-teal-200",
+    hex: "#14b8a6",
+  },
   "In Progress": {
     dot: "bg-violet-500",
     badge: "bg-violet-50 text-violet-700",
@@ -1731,6 +1856,8 @@ const statusStyles: Record<
 const displayLabels: Record<JobStatus, string> = {
   "New Jobs": "New Jobs",
   "Pending Jobs": "Pending Jobs",
+  "Pending Customer Replies": "Pending Customer Replies",
+  "Maintenance and Renewals": "Maintenance and Renewals",
   "In Progress": "In Progress",
   "Claim Warranty": "Claim Warranty",
   "Pending Parts": "Pending Parts",
@@ -1743,6 +1870,8 @@ const displayLabels: Record<JobStatus, string> = {
 const statisticLabels: Record<BoardJobStatus, string> = {
   "New Jobs": "New Jobs",
   "Pending Jobs": "Pending Jobs",
+  "Pending Customer Replies": "Pending Customer Replies",
+  "Maintenance and Renewals": "Maintenance and Renewals",
   "Claim Warranty": "Claim Warranty",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
@@ -1754,6 +1883,8 @@ const statisticLabels: Record<BoardJobStatus, string> = {
 const distributionLabels: Record<BoardJobStatus, string> = {
   "New Jobs": "New Jobs",
   "Pending Jobs": "Pending Jobs",
+  "Pending Customer Replies": "Pending Customer Replies",
+  "Maintenance and Renewals": "Maintenance and Renewals",
   "Claim Warranty": "Claim Warranty",
   "Pending Parts": "Pending Parts",
   "Pending Quotation": "Pending Quotation",
@@ -1765,6 +1896,8 @@ const distributionLabels: Record<BoardJobStatus, string> = {
 const statusDescriptions: Record<BoardJobStatus, string> = {
   "New Jobs": "Newly created jobs",
   "Pending Jobs": "Jobs waiting for the next action",
+  "Pending Customer Replies": "Waiting for a customer response",
+  "Maintenance and Renewals": "Maintenance and renewal work",
   "Claim Warranty": "Jobs under warranty claim",
   "Pending Parts": "Waiting for required parts",
   "Pending Quotation": "Waiting for quotation approval",
@@ -2048,6 +2181,8 @@ const JOB_DATE_COLUMNS = new Set<JobColumnKey>([
 const JOB_STATUS_SORT_ORDER: readonly JobStatus[] = [
   "New Jobs",
   "Pending Jobs",
+  "Pending Customer Replies",
+  "Maintenance and Renewals",
   "In Progress",
   "Claim Warranty",
   "Pending Parts",
@@ -2122,6 +2257,10 @@ function jobMatchesGlobalSearch(job: Job, query: string) {
   const statusAliases: Record<JobStatus, string> = {
     "New Jobs": "new job new jobs",
     "Pending Jobs": "pending job pending jobs",
+    "Pending Customer Replies":
+      "pending customer reply pending customer replies customer response",
+    "Maintenance and Renewals":
+      "maintenance and renewal maintenance and renewals renewal",
     "In Progress": "in progress progressing",
     "Claim Warranty": "claim warranty warranty",
     "Pending Parts": "pending part pending parts",
@@ -3138,8 +3277,8 @@ export default function DashboardPage() {
 
           {!collapsedModules["status-cards"] && (
             <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {settings.statisticCardOrder.slice(0, 3).map((status) =>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {settings.statisticCardOrder.slice(0, 4).map((status) =>
               statisticCards.find((card) => card.status === status),
             )
               .filter(
@@ -3152,8 +3291,8 @@ export default function DashboardPage() {
               ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {settings.statisticCardOrder.slice(3).map((status) =>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+            {settings.statisticCardOrder.slice(4).map((status) =>
               statisticCards.find((card) => card.status === status),
             )
               .filter(
@@ -3409,7 +3548,7 @@ export default function DashboardPage() {
                     Stage Legend
                   </p>
 
-                  <div className="mt-2 flex flex-wrap items-center justify-start gap-x-3 gap-y-2 xl:flex-nowrap xl:justify-between">
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-5">
                     {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
@@ -3459,27 +3598,29 @@ export default function DashboardPage() {
                   </select>
                 </label>
 
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-x-3 gap-y-3 2xl:flex-nowrap 2xl:justify-end">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
                   <p className="shrink-0 text-sm font-semibold text-slate-700">
                     Summary:
                   </p>
 
-                  {JOB_STATUSES.map((status) => (
-                    <div
-                      key={status}
-                      className="flex shrink-0 items-center gap-2"
-                    >
-                      <span
-                        className={`flex min-w-7 items-center justify-center rounded-md px-2 py-1 text-xs font-bold ${statusStyles[status].numberBadge}`}
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-5">
+                    {JOB_STATUSES.map((status) => (
+                      <div
+                        key={status}
+                        className="flex min-w-0 items-center gap-2"
                       >
-                        {boardStatusCounts[status]}
-                      </span>
+                        <span
+                          className={`flex min-w-7 shrink-0 items-center justify-center rounded-md px-2 py-1 text-xs font-bold ${statusStyles[status].numberBadge}`}
+                        >
+                          {boardStatusCounts[status]}
+                        </span>
 
-                      <span className="whitespace-nowrap text-xs font-medium text-slate-600">
-                        {displayLabels[status]}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="text-xs font-medium leading-4 text-slate-600">
+                          {displayLabels[status]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex w-full shrink-0 items-center justify-end gap-2 border-t border-slate-200 pt-3 sm:ml-auto sm:w-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
@@ -3742,6 +3883,11 @@ export default function DashboardPage() {
                                     job.collectionDateTime,
                                   )}
                                 />
+
+                                <DateTimeDisplayRow
+                                  label="Maintenance Duration"
+                                  value={job.maintenanceDuration || "-"}
+                                />
                               </div>
                             </div>
 
@@ -3854,6 +4000,7 @@ const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
   "status",
   "jobStartDateTime",
   "statusRemark",
+  "maintenanceDuration",
   "jobCompleteDateTime",
   "invoiceNo",
   "reportNo",
@@ -4088,6 +4235,14 @@ function DashboardThemeStyles() {
 
       .aec-dark [class~="bg-violet-100"] {
         background-color: #31245b !important;
+      }
+
+      .aec-dark [class~="bg-indigo-100"] {
+        background-color: #252b63 !important;
+      }
+
+      .aec-dark [class~="bg-teal-100"] {
+        background-color: #123f3d !important;
       }
 
       .aec-dark [class~="bg-amber-100"] {
