@@ -215,11 +215,54 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
 const LAYOUT_STORAGE_KEY = "aec-dashboard-layout-settings-v1";
+const SHARED_LAYOUT_PREFIX = "aec-dashboard-shared-layout-v1:";
 
 type PersistedDashboardLayout = Pick<
   DashboardSettings,
   "dashboardModuleOrder" | "statisticCardOrder"
 >;
+
+type SharedDashboardLayout = PersistedDashboardLayout & {
+  systemValue: string;
+};
+
+function readSharedDashboardLayout(value: unknown): SharedDashboardLayout | null {
+  if (typeof value !== "string" || !value.startsWith(SHARED_LAYOUT_PREFIX)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      decodeURIComponent(value.slice(SHARED_LAYOUT_PREFIX.length)),
+    ) as SharedDashboardLayout;
+  } catch {
+    return null;
+  }
+}
+
+function hasSharedDashboardLayout(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const settings = value as Partial<DashboardSettings>;
+
+  return Boolean(
+    readSharedDashboardLayout(settings.system) ||
+      Array.isArray(settings.dashboardModuleOrder) ||
+      Array.isArray(settings.statisticCardOrder),
+  );
+}
+
+function encodeSharedDashboardLayout(settings: DashboardSettings) {
+  const existingEnvelope = readSharedDashboardLayout(settings.system);
+  const sharedLayout: SharedDashboardLayout = {
+    systemValue: existingEnvelope?.systemValue ?? settings.system,
+    dashboardModuleOrder: settings.dashboardModuleOrder,
+    statisticCardOrder: settings.statisticCardOrder,
+  };
+
+  return `${SHARED_LAYOUT_PREFIX}${encodeURIComponent(
+    JSON.stringify(sharedLayout),
+  )}`;
+}
 
 function readPersistedDashboardLayout(): Partial<PersistedDashboardLayout> {
   if (typeof window === "undefined") return {};
@@ -264,6 +307,7 @@ function normalizeSettings(value: unknown): DashboardSettings {
     value && typeof value === "object"
       ? (value as Partial<DashboardSettings>)
       : {};
+  const sharedLayout = readSharedDashboardLayout(saved.system);
 
   const shouldApplyBrandingDefault =
     typeof saved.brandingDefaultVersion !== "number" ||
@@ -285,14 +329,15 @@ function normalizeSettings(value: unknown): DashboardSettings {
       saved.appearance === "light"
         ? saved.appearance
         : DEFAULT_SETTINGS.appearance,
+    system: sharedLayout?.systemValue ?? saved.system ?? DEFAULT_SETTINGS.system,
     columnOrder: normalizeColumnOrder(saved.columnOrder),
     defaultColumnOrder: normalizeColumnOrder(saved.defaultColumnOrder),
     dashboardModuleOrder: normalizeOrderedKeys(
-      saved.dashboardModuleOrder,
+      sharedLayout?.dashboardModuleOrder ?? saved.dashboardModuleOrder,
       DASHBOARD_MODULE_KEYS,
     ),
     statisticCardOrder: normalizeOrderedKeys(
-      saved.statisticCardOrder,
+      sharedLayout?.statisticCardOrder ?? saved.statisticCardOrder,
       DEFAULT_STATISTIC_CARD_ORDER,
     ),
   };
@@ -538,14 +583,19 @@ export default function SettingsPage() {
 
         const result = (await response.json()) as { settings?: unknown };
         const cached = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        const nextSettings = mergePersistedDashboardLayout(
-          normalizeSettings(
-            result.settings ?? (cached ? JSON.parse(cached) : null),
-          ),
+        const serverHasSharedLayout = hasSharedDashboardLayout(result.settings);
+        const normalizedSettings = normalizeSettings(
+          result.settings ?? (cached ? JSON.parse(cached) : null),
         );
+        const nextSettings = serverHasSharedLayout
+          ? normalizedSettings
+          : mergePersistedDashboardLayout(normalizedSettings);
 
         if (mounted) {
           setSettings(nextSettings);
+          if (serverHasSharedLayout) {
+            writePersistedDashboardLayout(nextSettings);
+          }
           window.localStorage.setItem(
             SETTINGS_STORAGE_KEY,
             JSON.stringify(nextSettings),
@@ -648,10 +698,14 @@ export default function SettingsPage() {
     window.dispatchEvent(new Event("aec-settings-updated"));
 
     try {
+      const settingsForAllAccounts: DashboardSettings = {
+        ...nextSettings,
+        system: encodeSharedDashboardLayout(nextSettings),
+      };
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: nextSettings }),
+        body: JSON.stringify({ settings: settingsForAllAccounts }),
         cache: "no-store",
       });
 

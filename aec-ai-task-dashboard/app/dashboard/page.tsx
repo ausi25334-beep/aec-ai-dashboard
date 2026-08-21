@@ -595,11 +595,41 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
 const LAYOUT_STORAGE_KEY = "aec-dashboard-layout-settings-v1";
+const SHARED_LAYOUT_PREFIX = "aec-dashboard-shared-layout-v1:";
 
 type PersistedDashboardLayout = Pick<
   DashboardSettings,
   "dashboardModuleOrder" | "statisticCardOrder"
 >;
+
+type SharedDashboardLayout = PersistedDashboardLayout & {
+  systemValue: string;
+};
+
+function readSharedDashboardLayout(value: unknown): SharedDashboardLayout | null {
+  if (typeof value !== "string" || !value.startsWith(SHARED_LAYOUT_PREFIX)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      decodeURIComponent(value.slice(SHARED_LAYOUT_PREFIX.length)),
+    ) as SharedDashboardLayout;
+  } catch {
+    return null;
+  }
+}
+
+function hasSharedDashboardLayout(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const settings = value as Partial<DashboardSettings>;
+
+  return Boolean(
+    readSharedDashboardLayout(settings.system) ||
+      Array.isArray(settings.dashboardModuleOrder) ||
+      Array.isArray(settings.statisticCardOrder),
+  );
+}
 
 function readPersistedDashboardLayout(): Partial<PersistedDashboardLayout> {
   if (typeof window === "undefined") return {};
@@ -610,6 +640,15 @@ function readPersistedDashboardLayout(): Partial<PersistedDashboardLayout> {
   } catch {
     return {};
   }
+}
+
+function writePersistedDashboardLayout(settings: DashboardSettings) {
+  const layout: PersistedDashboardLayout = {
+    dashboardModuleOrder: settings.dashboardModuleOrder,
+    statisticCardOrder: settings.statisticCardOrder,
+  };
+
+  window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
 }
 
 function mergePersistedDashboardLayout(
@@ -635,6 +674,7 @@ function normalizeSettings(value: unknown): DashboardSettings {
     value && typeof value === "object"
       ? (value as Partial<DashboardSettings>)
       : {};
+  const sharedLayout = readSharedDashboardLayout(saved.system);
 
   const shouldApplyBrandingDefault =
     typeof saved.brandingDefaultVersion !== "number" ||
@@ -656,14 +696,15 @@ function normalizeSettings(value: unknown): DashboardSettings {
       saved.appearance === "light"
         ? saved.appearance
         : DEFAULT_SETTINGS.appearance,
+    system: sharedLayout?.systemValue ?? saved.system ?? DEFAULT_SETTINGS.system,
     columnOrder: normalizeColumnOrder(saved.columnOrder),
     defaultColumnOrder: normalizeColumnOrder(saved.defaultColumnOrder),
     dashboardModuleOrder: normalizeOrderedKeys(
-      saved.dashboardModuleOrder,
+      sharedLayout?.dashboardModuleOrder ?? saved.dashboardModuleOrder,
       DASHBOARD_MODULE_KEYS,
     ),
     statisticCardOrder: normalizeOrderedKeys(
-      saved.statisticCardOrder,
+      sharedLayout?.statisticCardOrder ?? saved.statisticCardOrder,
       DEFAULT_STATISTIC_CARD_ORDER,
     ),
   };
@@ -860,7 +901,8 @@ function JobDataTable({
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
-  const [sortColumn, setSortColumn] = useState<JobColumnKey | null>(null);
+  const [sortColumn, setSortColumn] =
+    useState<JobColumnKey | null>("statusRemark");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [filterIsOpen, setFilterIsOpen] = useState(false);
   const [selectedStaffFilters, setSelectedStaffFilters] = useState<string[]>(
@@ -1901,6 +1943,17 @@ function parseDateTime(value?: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function getEarliestStatusRemarkTime(value?: string) {
+  if (!value?.trim()) return null;
+
+  const parsedTimes = value
+    .split(/\r?\n/)
+    .map((line) => parseDateTime(line.trim())?.getTime())
+    .filter((time): time is number => time !== undefined);
+
+  return parsedTimes.length > 0 ? Math.min(...parsedTimes) : null;
+}
+
 function compareJobsByNewest(a: Job, b: Job) {
   const aDate = parseDateTime(a.jobInDateTime);
   const bDate = parseDateTime(b.jobInDateTime);
@@ -1963,6 +2016,17 @@ function compareJobsByColumn(
     if (aTime !== undefined && bTime !== undefined && aTime !== bTime) {
       return (aTime - bTime) * multiplier;
     }
+  }
+
+  if (column === "statusRemark") {
+    const aTime = getEarliestStatusRemarkTime(aValue);
+    const bTime = getEarliestStatusRemarkTime(bValue);
+
+    // Remarks without a valid date/time stay at the bottom.
+    if (aTime === null && bTime === null) return 0;
+    if (aTime === null) return 1;
+    if (bTime === null) return -1;
+    if (aTime !== bTime) return (aTime - bTime) * multiplier;
   }
 
   if (column === "status") {
@@ -2323,14 +2387,19 @@ export default function DashboardPage() {
 
         const result = (await response.json()) as { settings?: unknown };
         const cached = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        const nextSettings = mergePersistedDashboardLayout(
-          normalizeSettings(
-            result.settings ?? (cached ? JSON.parse(cached) : null),
-          ),
+        const serverHasSharedLayout = hasSharedDashboardLayout(result.settings);
+        const normalizedSettings = normalizeSettings(
+          result.settings ?? (cached ? JSON.parse(cached) : null),
         );
+        const nextSettings = serverHasSharedLayout
+          ? normalizedSettings
+          : mergePersistedDashboardLayout(normalizedSettings);
 
         if (mounted) {
           setSettings(nextSettings);
+          if (serverHasSharedLayout) {
+            writePersistedDashboardLayout(nextSettings);
+          }
           window.localStorage.setItem(
             SETTINGS_STORAGE_KEY,
             JSON.stringify(nextSettings),
@@ -2516,8 +2585,9 @@ export default function DashboardPage() {
   }, []);
 
   /*
-    Shared order for the information sheet and all seven progress boards:
-    Job In Date & Time descending, then Job ID descending.
+    Base order for the calendar, searches and progress boards: Job In Date &
+    Time descending, then Job ID descending. Job Information Sheet applies its
+    own default Status Remark / Issue date order inside JobDataTable.
   */
   const orderedJobs = useMemo(
     () => [...jobs].sort(compareJobsByNewest),
