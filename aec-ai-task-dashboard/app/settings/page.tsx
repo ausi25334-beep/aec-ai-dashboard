@@ -31,6 +31,7 @@ type JobColumnKey = (typeof JOB_COLUMN_KEYS)[number];
 const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobId: "Job ID",
   jobInDateTime: "Job In Date & Time",
+  jobStartDateTime: "Job Start Date & Time",
   salesPerson: "Sales Person",
   customerName: "Customer Name",
   customerPhone: "Customer Phone",
@@ -38,7 +39,6 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   assignedTechnician: "Assigned Engineer",
   description: "Description / Item",
   status: "Status",
-  jobStartDateTime: "Job Start Date & Time",
   statusRemark: "Status Remark / Issue",
   jobCompleteDateTime: "Job Complete Date & Time",
   invoiceNo: "Invoice No.",
@@ -51,14 +51,10 @@ const DEFAULT_COLUMN_ORDER: JobColumnKey[] = [...JOB_COLUMN_KEYS];
 function normalizeColumnOrder(value: unknown): JobColumnKey[] {
   const validKeys = new Set<JobColumnKey>(JOB_COLUMN_KEYS);
   const savedKeys = Array.isArray(value)
-    ? value
-        .map((key) =>
-          key === "inProgressStartDateTime" ? "jobStartDateTime" : key,
-        )
-        .filter(
-          (key): key is JobColumnKey =>
-            typeof key === "string" && validKeys.has(key as JobColumnKey),
-        )
+    ? value.filter(
+        (key): key is JobColumnKey =>
+          typeof key === "string" && validKeys.has(key as JobColumnKey),
+      )
     : [];
   const uniqueSavedKeys = Array.from(new Set(savedKeys));
 
@@ -68,12 +64,90 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
   ];
 }
 
+const JOB_STATUSES = [
+  "New Jobs",
+  "Pending Jobs",
+  "Claim Warranty",
+  "Pending Parts",
+  "Pending Quotation",
+  "Pending Invoice",
+  "Cancelled",
+  "Complete",
+] as const;
+
+type BoardJobStatus = (typeof JOB_STATUSES)[number];
+
+const DEFAULT_STATISTIC_CARD_ORDER: BoardJobStatus[] = [
+  "New Jobs",
+  "Pending Jobs",
+  "Complete",
+  "Claim Warranty",
+  "Pending Parts",
+  "Pending Quotation",
+  "Pending Invoice",
+  "Cancelled",
+];
+
+const DASHBOARD_MODULE_KEYS = [
+  "status-cards",
+  "job-information",
+  "job-progress",
+  "job-calendar",
+  "analytics",
+  "staff-directory",
+] as const;
+
+type DashboardModuleKey = (typeof DASHBOARD_MODULE_KEYS)[number];
+
+const DEFAULT_DASHBOARD_MODULE_ORDER: DashboardModuleKey[] = [
+  ...DASHBOARD_MODULE_KEYS,
+];
+
+const DASHBOARD_MODULE_LABELS: Record<DashboardModuleKey, string> = {
+  "status-cards": "Job Status Statistic Cards",
+  "job-information": "Job Information Sheet",
+  "job-progress": "Job Progress Board",
+  "job-calendar": "Job Calendar",
+  analytics: "Weekly Job Trend & Job Status",
+  "staff-directory": "Staff Directory",
+};
+
+const STATUS_CARD_LABELS: Record<BoardJobStatus, string> = {
+  "New Jobs": "New Jobs",
+  "Pending Jobs": "Pending Jobs",
+  "Claim Warranty": "Claim Warranty",
+  "Pending Parts": "Pending Parts",
+  "Pending Quotation": "Pending Quotation",
+  "Pending Invoice": "Pending Invoice",
+  Cancelled: "Cancelled",
+  Complete: "Completed",
+};
+
+function normalizeOrderedKeys<T extends string>(
+  value: unknown,
+  validKeys: readonly T[],
+): T[] {
+  const validKeySet = new Set<T>(validKeys);
+  const savedKeys = Array.isArray(value)
+    ? value.filter(
+        (key): key is T =>
+          typeof key === "string" && validKeySet.has(key as T),
+      )
+    : [];
+  const uniqueSavedKeys = Array.from(new Set(savedKeys));
+
+  return [
+    ...uniqueSavedKeys,
+    ...validKeys.filter((key) => !uniqueSavedKeys.includes(key)),
+  ];
+}
+
 type DashboardSettings = {
   logoDataUrl: string;
   companyName: string;
   dashboardTitle: string;
   administratorName: string;
-  operationsTeam: string;
+  topmanagementSetting: string;
   appearance: "system" | "light" | "dark";
   appearanceDefaultVersion: number;
   language: string;
@@ -83,6 +157,9 @@ type DashboardSettings = {
   autoCompleteDate: boolean;
   columnOrder: JobColumnKey[];
   defaultColumnOrder: JobColumnKey[];
+  dashboardModuleOrder: DashboardModuleKey[];
+  statisticCardOrder: BoardJobStatus[];
+  brandingDefaultVersion: number;
 };
 
 type SettingsCategory = "organization" | "job-dashboard";
@@ -112,15 +189,15 @@ function canManageSettings(role: string | undefined) {
   To change the built-in placeholder manually, replace this data URL.
   The normal way to replace it is Settings > Branding > Upload New Logo.
 */
-const DEFAULT_LOGO_DATA_URL =
-  "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='24' fill='%232563eb'/%3E%3Cpath d='M60 20 94 39v42L60 100 26 81V39Z' fill='none' stroke='white' stroke-width='7'/%3E%3Cpath d='m42 75 18-36 18 36M49 62h22' fill='none' stroke='white' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+const DEFAULT_LOGO_DATA_URL = "/aec-logo.jpg";
+const BRANDING_DEFAULT_VERSION = 3;
 
 const DEFAULT_SETTINGS: DashboardSettings = {
   logoDataUrl: DEFAULT_LOGO_DATA_URL,
-  companyName: "AEC Company",
+  companyName: "AEC COMPUTER SOLUTIONS (M) SDN BHD",
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
-  operationsTeam: "Operations Team",
+  topmanagementSetting: "Top Management Setting",
   appearance: "light",
   appearanceDefaultVersion: 2,
   language: "default",
@@ -130,6 +207,9 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   autoCompleteDate: true,
   columnOrder: DEFAULT_COLUMN_ORDER,
   defaultColumnOrder: DEFAULT_COLUMN_ORDER,
+  dashboardModuleOrder: DEFAULT_DASHBOARD_MODULE_ORDER,
+  statisticCardOrder: DEFAULT_STATISTIC_CARD_ORDER,
+  brandingDefaultVersion: BRANDING_DEFAULT_VERSION,
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
@@ -140,9 +220,20 @@ function normalizeSettings(value: unknown): DashboardSettings {
       ? (value as Partial<DashboardSettings>)
       : {};
 
+  const shouldApplyBrandingDefault =
+    typeof saved.brandingDefaultVersion !== "number" ||
+    saved.brandingDefaultVersion < BRANDING_DEFAULT_VERSION;
+
   return {
     ...DEFAULT_SETTINGS,
     ...saved,
+    logoDataUrl: shouldApplyBrandingDefault
+      ? DEFAULT_SETTINGS.logoDataUrl
+      : saved.logoDataUrl || DEFAULT_SETTINGS.logoDataUrl,
+    companyName: shouldApplyBrandingDefault
+      ? DEFAULT_SETTINGS.companyName
+      : saved.companyName || DEFAULT_SETTINGS.companyName,
+    brandingDefaultVersion: BRANDING_DEFAULT_VERSION,
     appearance:
       saved.appearance === "dark" ||
       saved.appearance === "system" ||
@@ -151,6 +242,14 @@ function normalizeSettings(value: unknown): DashboardSettings {
         : DEFAULT_SETTINGS.appearance,
     columnOrder: normalizeColumnOrder(saved.columnOrder),
     defaultColumnOrder: normalizeColumnOrder(saved.defaultColumnOrder),
+    dashboardModuleOrder: normalizeOrderedKeys(
+      saved.dashboardModuleOrder,
+      DASHBOARD_MODULE_KEYS,
+    ),
+    statisticCardOrder: normalizeOrderedKeys(
+      saved.statisticCardOrder,
+      DEFAULT_STATISTIC_CARD_ORDER,
+    ),
   };
 }
 
@@ -226,6 +325,99 @@ function DashboardIcon() {
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
       <rect x="14" y="14" width="7" height="7" rx="1.5" />
     </svg>
+  );
+}
+
+type SortableOrderListProps<T extends string> = {
+  items: T[];
+  labels: Record<T, string>;
+  onChange: (items: T[]) => void;
+};
+
+function SortableOrderList<T extends string>({
+  items,
+  labels,
+  onChange,
+}: SortableOrderListProps<T>) {
+  const [draggedItem, setDraggedItem] = useState<T | null>(null);
+
+  function moveItem(item: T, direction: -1 | 1) {
+    const currentIndex = items.indexOf(item);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
+
+    const nextItems = [...items];
+    [nextItems[currentIndex], nextItems[nextIndex]] = [
+      nextItems[nextIndex],
+      nextItems[currentIndex],
+    ];
+    onChange(nextItems);
+  }
+
+  function dropItem(targetItem: T) {
+    if (!draggedItem || draggedItem === targetItem) {
+      setDraggedItem(null);
+      return;
+    }
+
+    const nextItems = items.filter((item) => item !== draggedItem);
+    const targetIndex = nextItems.indexOf(targetItem);
+    nextItems.splice(targetIndex, 0, draggedItem);
+    onChange(nextItems);
+    setDraggedItem(null);
+  }
+
+  return (
+    <div className="mt-5 space-y-2">
+      {items.map((item, index) => (
+        <div
+          key={item}
+          draggable
+          onDragStart={() => setDraggedItem(item)}
+          onDragEnd={() => setDraggedItem(null)}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={() => dropItem(item)}
+          className={`flex cursor-grab items-center gap-3 rounded-xl border px-3 py-3 transition active:cursor-grabbing ${
+            draggedItem === item
+              ? "border-blue-400 bg-blue-50 opacity-60"
+              : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/50"
+          }`}
+        >
+          <span
+            className="select-none text-lg font-bold tracking-[-0.2em] text-slate-400"
+            aria-hidden="true"
+          >
+            ⋮⋮
+          </span>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-semibold text-slate-500 shadow-sm">
+            {index + 1}
+          </span>
+          <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
+            {labels[item]}
+          </span>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => moveItem(item, -1)}
+              disabled={index === 0}
+              aria-label={`Move ${labels[item]} up`}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => moveItem(item, 1)}
+              disabled={index === items.length - 1}
+              aria-label={`Move ${labels[item]} down`}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              ↓
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -488,12 +680,16 @@ export default function SettingsPage() {
       | "showSummary"
       | "autoCompleteDate"
       | "columnOrder"
+      | "dashboardModuleOrder"
+      | "statisticCardOrder"
     > = {
       appearance: DEFAULT_SETTINGS.appearance,
       showStageLegend: DEFAULT_SETTINGS.showStageLegend,
       showSummary: DEFAULT_SETTINGS.showSummary,
       autoCompleteDate: DEFAULT_SETTINGS.autoCompleteDate,
-      columnOrder: [...settings.defaultColumnOrder],
+      columnOrder: [...DEFAULT_COLUMN_ORDER],
+      dashboardModuleOrder: [...DEFAULT_DASHBOARD_MODULE_ORDER],
+      statisticCardOrder: [...DEFAULT_STATISTIC_CARD_ORDER],
     };
 
     const nextSettings = {
@@ -503,18 +699,6 @@ export default function SettingsPage() {
 
     setSettings(nextSettings);
     await saveSharedSettings(normalizeSettings(nextSettings));
-  }
-
-  async function handleSetDefault() {
-    if (!canManageSettings(currentUser?.role)) return;
-
-    const nextSettings = normalizeSettings({
-      ...settings,
-      defaultColumnOrder: [...settings.columnOrder],
-    });
-
-    setSettings(nextSettings);
-    await saveSharedSettings(nextSettings);
   }
 
   function moveColumn(column: JobColumnKey, direction: -1 | 1) {
@@ -802,7 +986,7 @@ export default function SettingsPage() {
                           updateTextField("companyName", event.target.value)
                         }
                         className={inputStyle}
-                        placeholder="AEC Company"
+                        placeholder="AEC COMPUTER SOLUTIONS (M) SDN BHD"
                       />
                     </div>
 
@@ -863,20 +1047,23 @@ export default function SettingsPage() {
 
                     <div>
                       <label
-                        htmlFor="operationsTeam"
+                        htmlFor="topmanagementSetting"
                         className="text-sm font-medium text-slate-700"
                       >
                         Department / Team
                       </label>
 
                       <input
-                        id="operationsTeam"
-                        value={settings.operationsTeam}
+                        id="topmanagementSetting"
+                        value={settings.topmanagementSetting}
                         onChange={(event) =>
-                          updateTextField("operationsTeam", event.target.value)
+                          updateTextField(
+                            "topmanagementSetting",
+                            event.target.value,
+                          )
                         }
                         className={inputStyle}
-                        placeholder="Operations Team"
+                        placeholder="Top Management Setting"
                       />
                     </div>
                   </div>
@@ -940,6 +1127,54 @@ export default function SettingsPage() {
                       }}
                     />
                   </div>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Dashboard Module Layout
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Drag modules into the preferred dashboard order, or use
+                      the arrow buttons. The first item appears at the top.
+                    </p>
+                  </div>
+
+                  <SortableOrderList
+                    items={settings.dashboardModuleOrder}
+                    labels={DASHBOARD_MODULE_LABELS}
+                    onChange={(dashboardModuleOrder) => {
+                      setSettings((current) => ({
+                        ...current,
+                        dashboardModuleOrder,
+                      }));
+                      setSaved(false);
+                    }}
+                  />
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                  <div className="border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      Status Card Order
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Reorder the New Jobs, Pending Jobs, Completed and other
+                      statistic cards. The first three cards use the top row.
+                    </p>
+                  </div>
+
+                  <SortableOrderList
+                    items={settings.statisticCardOrder}
+                    labels={STATUS_CARD_LABELS}
+                    onChange={(statisticCardOrder) => {
+                      setSettings((current) => ({
+                        ...current,
+                        statisticCardOrder,
+                      }));
+                      setSaved(false);
+                    }}
+                  />
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -1061,7 +1296,7 @@ export default function SettingsPage() {
                 <div
                   role="status"
                   aria-live="polite"
-                  className="w-full shrink-0 whitespace-nowrap rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs font-medium text-emerald-700 sm:w-auto"
+                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 sm:w-auto"
                 >
                   Settings saved successfully.
                 </div>
@@ -1070,19 +1305,7 @@ export default function SettingsPage() {
               {activeCategory === "job-dashboard" && (
                 <button
                   type="button"
-                  onClick={handleSetDefault}
-                  disabled={saving}
-                  className="h-11 w-full rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                >
-                  Set Default
-                </button>
-              )}
-
-              {activeCategory === "job-dashboard" && (
-                <button
-                  type="button"
                   onClick={handleReset}
-                  disabled={saving}
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
                 >
                   Reset Default

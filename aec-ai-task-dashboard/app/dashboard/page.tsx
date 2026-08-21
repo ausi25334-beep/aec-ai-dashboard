@@ -39,6 +39,45 @@ const SECOND_ROW_STATUSES: readonly BoardJobStatus[] = [
   "Cancelled",
 ];
 
+const DEFAULT_STATISTIC_CARD_ORDER: BoardJobStatus[] = [
+  ...TOP_STATUSES,
+  ...SECOND_ROW_STATUSES,
+];
+
+const DASHBOARD_MODULE_KEYS = [
+  "status-cards",
+  "job-information",
+  "job-progress",
+  "job-calendar",
+  "analytics",
+  "staff-directory",
+] as const;
+
+type DashboardModuleKey = (typeof DASHBOARD_MODULE_KEYS)[number];
+
+const DEFAULT_DASHBOARD_MODULE_ORDER: DashboardModuleKey[] = [
+  ...DASHBOARD_MODULE_KEYS,
+];
+
+function normalizeOrderedKeys<T extends string>(
+  value: unknown,
+  validKeys: readonly T[],
+): T[] {
+  const validKeySet = new Set<T>(validKeys);
+  const savedKeys = Array.isArray(value)
+    ? value.filter(
+        (key): key is T =>
+          typeof key === "string" && validKeySet.has(key as T),
+      )
+    : [];
+  const uniqueSavedKeys = Array.from(new Set(savedKeys));
+
+  return [
+    ...uniqueSavedKeys,
+    ...validKeys.filter((key) => !uniqueSavedKeys.includes(key)),
+  ];
+}
+
 const DISTRIBUTION_STATUSES: readonly BoardJobStatus[] = [
   "New Jobs",
   "Pending Jobs",
@@ -509,6 +548,9 @@ type DashboardSettings = {
   autoCompleteDate: boolean;
   columnOrder: JobColumnKey[];
   defaultColumnOrder: JobColumnKey[];
+  dashboardModuleOrder: DashboardModuleKey[];
+  statisticCardOrder: BoardJobStatus[];
+  brandingDefaultVersion: number;
 };
 
 const SETTINGS_ACCESS_ROLES = [
@@ -527,12 +569,12 @@ function canManageSettings(role: string) {
   If you prefer to change the default placeholder manually, replace the
   data URL below. Users can also upload a logo from Settings.
 */
-const DEFAULT_LOGO_DATA_URL =
-  "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='24' fill='%232563eb'/%3E%3Cpath d='M60 20 94 39v42L60 100 26 81V39Z' fill='none' stroke='white' stroke-width='7'/%3E%3Cpath d='m42 75 18-36 18 36M49 62h22' fill='none' stroke='white' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
+const DEFAULT_LOGO_DATA_URL = "/aec-logo.jpg";
+const BRANDING_DEFAULT_VERSION = 3;
 
 const DEFAULT_SETTINGS: DashboardSettings = {
   logoDataUrl: DEFAULT_LOGO_DATA_URL,
-  companyName: "AEC Company",
+  companyName: "AEC COMPUTER SOLUTIONS (M) SDN BHD",
   dashboardTitle: "AI Task Management Dashboard",
   administratorName: "Administrator",
   topmanagementSetting: "Top Management Setting",
@@ -545,6 +587,9 @@ const DEFAULT_SETTINGS: DashboardSettings = {
   autoCompleteDate: true,
   columnOrder: DEFAULT_COLUMN_ORDER,
   defaultColumnOrder: DEFAULT_COLUMN_ORDER,
+  dashboardModuleOrder: DEFAULT_DASHBOARD_MODULE_ORDER,
+  statisticCardOrder: DEFAULT_STATISTIC_CARD_ORDER,
+  brandingDefaultVersion: BRANDING_DEFAULT_VERSION,
 };
 
 const SETTINGS_STORAGE_KEY = "aec-dashboard-settings";
@@ -555,9 +600,20 @@ function normalizeSettings(value: unknown): DashboardSettings {
       ? (value as Partial<DashboardSettings>)
       : {};
 
+  const shouldApplyBrandingDefault =
+    typeof saved.brandingDefaultVersion !== "number" ||
+    saved.brandingDefaultVersion < BRANDING_DEFAULT_VERSION;
+
   return {
     ...DEFAULT_SETTINGS,
     ...saved,
+    logoDataUrl: shouldApplyBrandingDefault
+      ? DEFAULT_SETTINGS.logoDataUrl
+      : saved.logoDataUrl || DEFAULT_SETTINGS.logoDataUrl,
+    companyName: shouldApplyBrandingDefault
+      ? DEFAULT_SETTINGS.companyName
+      : saved.companyName || DEFAULT_SETTINGS.companyName,
+    brandingDefaultVersion: BRANDING_DEFAULT_VERSION,
     appearance:
       saved.appearance === "dark" ||
       saved.appearance === "system" ||
@@ -566,6 +622,14 @@ function normalizeSettings(value: unknown): DashboardSettings {
         : DEFAULT_SETTINGS.appearance,
     columnOrder: normalizeColumnOrder(saved.columnOrder),
     defaultColumnOrder: normalizeColumnOrder(saved.defaultColumnOrder),
+    dashboardModuleOrder: normalizeOrderedKeys(
+      saved.dashboardModuleOrder,
+      DASHBOARD_MODULE_KEYS,
+    ),
+    statisticCardOrder: normalizeOrderedKeys(
+      saved.statisticCardOrder,
+      DEFAULT_STATISTIC_CARD_ORDER,
+    ),
   };
 }
 
@@ -2830,11 +2894,16 @@ export default function DashboardPage() {
           </div>
         )}
 
+        <div className="flex flex-col">
+
         {/* Status Categories */}
 
-        <section className="space-y-4">
+        <section
+          className="space-y-4"
+          style={{ order: settings.dashboardModuleOrder.indexOf("status-cards") }}
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {TOP_STATUSES.map((status) =>
+            {settings.statisticCardOrder.slice(0, 3).map((status) =>
               statisticCards.find((card) => card.status === status),
             )
               .filter(
@@ -2848,7 +2917,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {SECOND_ROW_STATUSES.map((status) =>
+            {settings.statisticCardOrder.slice(3).map((status) =>
               statisticCards.find((card) => card.status === status),
             )
               .filter(
@@ -2864,7 +2933,10 @@ export default function DashboardPage() {
 
         {/* Two Charts */}
 
-        <section className="mt-8 grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <section
+          className="mt-8 grid grid-cols-1 gap-5 xl:grid-cols-2"
+          style={{ order: settings.dashboardModuleOrder.indexOf("analytics") }}
+        >
           <WeeklyJobChart
             data={weeklyData}
             todayCount={todayJobCount}
@@ -2876,11 +2948,18 @@ export default function DashboardPage() {
 
         {/* Staff Directory */}
 
-        <StaffDirectory staff={staff} />
+        <div
+          style={{ order: settings.dashboardModuleOrder.indexOf("staff-directory") }}
+        >
+          <StaffDirectory staff={staff} />
+        </div>
 
         {/* Automatic Job Calendar */}
 
-        <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section
+          className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          style={{ order: settings.dashboardModuleOrder.indexOf("job-calendar") }}
+        >
           <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-5">
             <div>
               <h2 className="text-lg font-semibold text-slate-950">
@@ -3020,16 +3099,23 @@ export default function DashboardPage() {
 
         {/* Job Information Sheet */}
 
+        <div
+          style={{ order: settings.dashboardModuleOrder.indexOf("job-information") }}
+        >
         <JobDataTable
           jobs={orderedJobs}
           staffOptions={staffFilterOptions}
           columnOrder={settings.columnOrder}
           onOpenJob={openJobDetails}
         />
+        </div>
 
         {/* Job Progress Board */}
 
-        <section className="mt-8">
+        <section
+          className="mt-8"
+          style={{ order: settings.dashboardModuleOrder.indexOf("job-progress") }}
+        >
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="shrink-0">
               <h2 className="text-lg font-semibold text-slate-950">
@@ -3453,6 +3539,7 @@ export default function DashboardPage() {
             })}
           </div>
         </section>
+        </div>
       </div>
 
       {selectedJob && (
