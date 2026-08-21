@@ -55,6 +55,32 @@ const DASHBOARD_MODULE_KEYS = [
 
 type DashboardModuleKey = (typeof DASHBOARD_MODULE_KEYS)[number];
 
+type CollapsedDashboardModules = Record<DashboardModuleKey, boolean>;
+
+const COLLAPSED_MODULES_STORAGE_PREFIX =
+  "aec-dashboard-collapsed-modules-v1:";
+
+function createExpandedDashboardModules(): CollapsedDashboardModules {
+  return DASHBOARD_MODULE_KEYS.reduce((state, moduleKey) => {
+    state[moduleKey] = false;
+    return state;
+  }, {} as CollapsedDashboardModules);
+}
+
+function normalizeCollapsedDashboardModules(
+  value: unknown,
+): CollapsedDashboardModules {
+  const saved =
+    value && typeof value === "object"
+      ? (value as Partial<CollapsedDashboardModules>)
+      : {};
+
+  return DASHBOARD_MODULE_KEYS.reduce((state, moduleKey) => {
+    state[moduleKey] = saved[moduleKey] === true;
+    return state;
+  }, {} as CollapsedDashboardModules);
+}
+
 const DEFAULT_DASHBOARD_MODULE_ORDER: DashboardModuleKey[] = [
   ...DASHBOARD_MODULE_KEYS,
 ];
@@ -888,22 +914,48 @@ function StatusIcon({
    Job Information Sheet
 ========================================================= */
 
+function ModuleCollapseButton({
+  moduleName,
+  isCollapsed,
+  onToggle,
+}: {
+  moduleName: string;
+  isCollapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={`${isCollapsed ? "Expand" : "Minimize"} ${moduleName}`}
+      title={`${isCollapsed ? "Expand" : "Minimize"} ${moduleName}`}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-lg font-semibold leading-none text-slate-600 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+    >
+      {isCollapsed ? "+" : "−"}
+    </button>
+  );
+}
+
 function JobDataTable({
   jobs,
   staffOptions,
   columnOrder,
   onOpenJob,
+  isCollapsed,
+  onToggleCollapse,
 }: {
   jobs: Job[];
   staffOptions: string[];
   columnOrder: JobColumnKey[];
   onOpenJob: (job: Job) => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }) {
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
   const [sortColumn, setSortColumn] =
     useState<JobColumnKey | null>("statusRemark");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [filterIsOpen, setFilterIsOpen] = useState(false);
   const [selectedStaffFilters, setSelectedStaffFilters] = useState<string[]>(
     [],
@@ -1046,11 +1098,22 @@ function JobDataTable({
           </p>
         </div>
 
-        <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
-          {filteredJobs.length} {filteredJobs.length === 1 ? "Job" : "Jobs"}
-        </span>
+        <div className="flex items-center gap-2">
+          {!isCollapsed && (
+            <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+              {filteredJobs.length} {filteredJobs.length === 1 ? "Job" : "Jobs"}
+            </span>
+          )}
+          <ModuleCollapseButton
+            moduleName="Job Information Sheet"
+            isCollapsed={isCollapsed}
+            onToggle={onToggleCollapse}
+          />
+        </div>
       </div>
 
+      {!isCollapsed && (
+        <>
       <div className="relative z-30 flex min-h-14 items-center justify-end border-b border-slate-100 bg-white px-4 py-2.5 sm:px-5">
         <div className="relative">
           <button
@@ -1279,6 +1342,8 @@ function JobDataTable({
           savePaginationDefault("job-information-sheet", pageSize)
         }
       />
+        </>
+      )}
     </section>
   );
 }
@@ -1943,15 +2008,18 @@ function parseDateTime(value?: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function getEarliestStatusRemarkTime(value?: string) {
+function getLatestStatusRemarkTime(value?: string) {
   if (!value?.trim()) return null;
 
   const parsedTimes = value
+    .replace(/\\n/g, "\n")
     .split(/\r?\n/)
-    .map((line) => parseDateTime(line.trim())?.getTime())
+    .map((line) =>
+      parseDateTime(line.trim().replace(/^\[/, ""))?.getTime(),
+    )
     .filter((time): time is number => time !== undefined);
 
-  return parsedTimes.length > 0 ? Math.min(...parsedTimes) : null;
+  return parsedTimes.length > 0 ? Math.max(...parsedTimes) : null;
 }
 
 function compareJobsByNewest(a: Job, b: Job) {
@@ -2019,8 +2087,8 @@ function compareJobsByColumn(
   }
 
   if (column === "statusRemark") {
-    const aTime = getEarliestStatusRemarkTime(aValue);
-    const bTime = getEarliestStatusRemarkTime(bValue);
+    const aTime = getLatestStatusRemarkTime(aValue);
+    const bTime = getLatestStatusRemarkTime(bValue);
 
     // Remarks without a valid date/time stay at the bottom.
     if (aTime === null && bTime === null) return 0;
@@ -2270,6 +2338,9 @@ export default function DashboardPage() {
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [currentUserName, setCurrentUserName] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState("");
+  const [currentUserStorageKey, setCurrentUserStorageKey] = useState("");
+  const [collapsedModules, setCollapsedModules] =
+    useState<CollapsedDashboardModules>(createExpandedDashboardModules);
   const [signingOut, setSigningOut] = useState(false);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -2329,10 +2400,21 @@ export default function DashboardPage() {
         }
 
         const result = (await response.json()) as {
-          user?: { name?: string; role?: string };
+          user?: {
+            id?: string;
+            email?: string;
+            phoneNumber?: string;
+            name?: string;
+            role?: string;
+          };
         };
         const name = result.user?.name?.trim();
         const role = result.user?.role?.trim() || "";
+        const accountIdentifier =
+          result.user?.id?.trim() ||
+          result.user?.email?.trim().toLocaleLowerCase() ||
+          result.user?.phoneNumber?.trim() ||
+          `${name || "user"}|${role}`.toLocaleLowerCase();
 
         if (!name) {
           router.replace("/login");
@@ -2343,6 +2425,7 @@ export default function DashboardPage() {
         if (mounted) {
           setCurrentUserName(name);
           setCurrentUserRole(role);
+          setCurrentUserStorageKey(encodeURIComponent(accountIdentifier));
         }
       } catch {
         router.replace("/login");
@@ -2356,6 +2439,31 @@ export default function DashboardPage() {
       mounted = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!currentUserStorageKey) return;
+
+    try {
+      const storageKey = `${COLLAPSED_MODULES_STORAGE_PREFIX}${currentUserStorageKey}`;
+      const saved = window.localStorage.getItem(storageKey);
+      setCollapsedModules(
+        normalizeCollapsedDashboardModules(saved ? JSON.parse(saved) : null),
+      );
+    } catch {
+      setCollapsedModules(createExpandedDashboardModules());
+    }
+  }, [currentUserStorageKey]);
+
+  function toggleDashboardModule(moduleKey: DashboardModuleKey) {
+    if (!currentUserStorageKey) return;
+
+    setCollapsedModules((current) => {
+      const next = { ...current, [moduleKey]: !current[moduleKey] };
+      const storageKey = `${COLLAPSED_MODULES_STORAGE_PREFIX}${currentUserStorageKey}`;
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!currentUserName) return;
@@ -3017,6 +3125,19 @@ export default function DashboardPage() {
           className="space-y-4"
           style={{ order: settings.dashboardModuleOrder.indexOf("status-cards") }}
         >
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+            <h2 className="text-lg font-semibold text-slate-950">
+              Job Status Statistic Cards
+            </h2>
+            <ModuleCollapseButton
+              moduleName="Job Status Statistic Cards"
+              isCollapsed={collapsedModules["status-cards"]}
+              onToggle={() => toggleDashboardModule("status-cards")}
+            />
+          </div>
+
+          {!collapsedModules["status-cards"] && (
+            <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {settings.statisticCardOrder.slice(0, 3).map((status) =>
               statisticCards.find((card) => card.status === status),
@@ -3044,14 +3165,29 @@ export default function DashboardPage() {
                 <StatisticCard key={card.status} {...card} />
               ))}
           </div>
+            </>
+          )}
         </section>
 
         {/* Two Charts */}
 
         <section
-          className="mt-8 grid grid-cols-1 gap-5 xl:grid-cols-2"
+          className="mt-8"
           style={{ order: settings.dashboardModuleOrder.indexOf("analytics") }}
         >
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+            <h2 className="text-lg font-semibold text-slate-950">
+              Weekly Job Trend &amp; Job Status
+            </h2>
+            <ModuleCollapseButton
+              moduleName="Weekly Job Trend and Job Status"
+              isCollapsed={collapsedModules.analytics}
+              onToggle={() => toggleDashboardModule("analytics")}
+            />
+          </div>
+
+          {!collapsedModules.analytics && (
+            <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
           <WeeklyJobChart
             data={weeklyData}
             todayCount={todayJobCount}
@@ -3059,6 +3195,8 @@ export default function DashboardPage() {
           />
 
           <JobStatusChart statusCounts={statusCounts} />
+            </div>
+          )}
         </section>
 
         {/* Staff Directory */}
@@ -3066,7 +3204,11 @@ export default function DashboardPage() {
         <div
           style={{ order: settings.dashboardModuleOrder.indexOf("staff-directory") }}
         >
-          <StaffDirectory staff={staff} />
+          <StaffDirectory
+            staff={staff}
+            isCollapsed={collapsedModules["staff-directory"]}
+            onToggleCollapse={() => toggleDashboardModule("staff-directory")}
+          />
         </div>
 
         {/* Automatic Job Calendar */}
@@ -3087,6 +3229,8 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {!collapsedModules["job-calendar"] && (
+                <>
               <button
                 type="button"
                 onClick={goToCurrentMonth}
@@ -3121,9 +3265,17 @@ export default function DashboardPage() {
               >
                 <ChevronRightIcon />
               </button>
+                </>
+              )}
+              <ModuleCollapseButton
+                moduleName="Job Calendar"
+                isCollapsed={collapsedModules["job-calendar"]}
+                onToggle={() => toggleDashboardModule("job-calendar")}
+              />
             </div>
           </div>
 
+          {!collapsedModules["job-calendar"] && (
           <div className="overflow-x-auto p-3 sm:p-4">
             <div className="min-w-[760px] sm:min-w-[1000px]">
               <div className="grid grid-cols-7">
@@ -3210,6 +3362,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+          )}
         </section>
 
         {/* Job Information Sheet */}
@@ -3222,6 +3375,8 @@ export default function DashboardPage() {
           staffOptions={staffFilterOptions}
           columnOrder={settings.columnOrder}
           onOpenJob={openJobDetails}
+          isCollapsed={collapsedModules["job-information"]}
+          onToggleCollapse={() => toggleDashboardModule("job-information")}
         />
         </div>
 
@@ -3233,17 +3388,21 @@ export default function DashboardPage() {
         >
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="shrink-0">
+              <div>
               <h2 className="text-lg font-semibold text-slate-950">
                 Job Progress Board
               </h2>
 
-              <p className="mt-1 text-sm leading-5 text-slate-500">
-                Each row displays up to five jobs. Additional jobs will
-                automatically continue on the next row.
-              </p>
+              {!collapsedModules["job-progress"] && (
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  Each row displays up to five jobs. Additional jobs will
+                  automatically continue on the next row.
+                </p>
+              )}
+              </div>
             </div>
 
-            {settings.showStageLegend && (
+            {!collapsedModules["job-progress"] && settings.showStageLegend && (
               <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:max-w-[68rem] xl:flex-1">
                 <div>
                   <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
@@ -3269,8 +3428,15 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
+            <ModuleCollapseButton
+              moduleName="Job Progress Board"
+              isCollapsed={collapsedModules["job-progress"]}
+              onToggle={() => toggleDashboardModule("job-progress")}
+            />
           </div>
 
+          {!collapsedModules["job-progress"] && (
+            <>
           {/* Summary */}
 
           {settings.showSummary && (
@@ -3653,6 +3819,8 @@ export default function DashboardPage() {
               );
             })}
           </div>
+            </>
+          )}
         </section>
         </div>
       </div>
@@ -3949,7 +4117,15 @@ function DashboardThemeStyles() {
    Staff Directory
 ========================================================= */
 
-function StaffDirectory({ staff }: { staff: Staff[] }) {
+function StaffDirectory({
+  staff,
+  isCollapsed,
+  onToggleCollapse,
+}: {
+  staff: Staff[];
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-100 px-4 py-4 sm:px-5 sm:py-5 xl:flex-row xl:items-center xl:justify-between">
@@ -3971,11 +4147,22 @@ function StaffDirectory({ staff }: { staff: Staff[] }) {
           </div>
         </div>
 
-        <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-          {staff.length} {staff.length === 1 ? "Staff Member" : "Staff Members"}
-        </span>
+        <div className="flex items-center gap-2">
+          {!isCollapsed && (
+            <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+              {staff.length}{" "}
+              {staff.length === 1 ? "Staff Member" : "Staff Members"}
+            </span>
+          )}
+          <ModuleCollapseButton
+            moduleName="Staff Directory"
+            isCollapsed={isCollapsed}
+            onToggle={onToggleCollapse}
+          />
+        </div>
       </div>
 
+      {!isCollapsed && (
       <div className="p-4 sm:p-5">
         <div className="min-w-0">
           {staff.length > 0 ? (
@@ -4057,6 +4244,7 @@ function StaffDirectory({ staff }: { staff: Staff[] }) {
           )}
         </div>
       </div>
+      )}
     </section>
   );
 }
