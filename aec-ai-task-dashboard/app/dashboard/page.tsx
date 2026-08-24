@@ -60,9 +60,12 @@ const DASHBOARD_MODULE_KEYS = [
 type DashboardModuleKey = (typeof DASHBOARD_MODULE_KEYS)[number];
 
 type CollapsedDashboardModules = Record<DashboardModuleKey, boolean>;
+type CollapsedBoardStatuses = Record<BoardJobStatus, boolean>;
 
 const COLLAPSED_MODULES_STORAGE_PREFIX =
   "aec-dashboard-collapsed-modules-v1:";
+const COLLAPSED_BOARD_STATUSES_STORAGE_PREFIX =
+  "aec-dashboard-collapsed-board-statuses-v1:";
 
 function createExpandedDashboardModules(): CollapsedDashboardModules {
   return DASHBOARD_MODULE_KEYS.reduce((state, moduleKey) => {
@@ -83,6 +86,27 @@ function normalizeCollapsedDashboardModules(
     state[moduleKey] = saved[moduleKey] === true;
     return state;
   }, {} as CollapsedDashboardModules);
+}
+
+function createExpandedBoardStatuses(): CollapsedBoardStatuses {
+  return JOB_STATUSES.reduce((state, status) => {
+    state[status] = false;
+    return state;
+  }, {} as CollapsedBoardStatuses);
+}
+
+function normalizeCollapsedBoardStatuses(
+  value: unknown,
+): CollapsedBoardStatuses {
+  const saved =
+    value && typeof value === "object"
+      ? (value as Partial<CollapsedBoardStatuses>)
+      : {};
+
+  return JOB_STATUSES.reduce((state, status) => {
+    state[status] = saved[status] === true;
+    return state;
+  }, {} as CollapsedBoardStatuses);
 }
 
 const DEFAULT_DASHBOARD_MODULE_ORDER: DashboardModuleKey[] = [
@@ -946,10 +970,14 @@ function StatusIcon({
   if (status === "Maintenance and Renewals") {
     return (
       <svg {...commonProps}>
-        <path d="M20 7h-5V2" />
-        <path d="M20 2v5h-5" />
-        <path d="M20 7a8 8 0 1 0 1 8" />
-        <path d="M12 8v4l3 2" />
+        <rect x="3" y="4" width="18" height="17" rx="2" />
+        <path d="M8 2v4" />
+        <path d="M16 2v4" />
+        <path d="M3 9h18" />
+        <path d="M8 15a4 4 0 0 1 7-2" />
+        <path d="M15 10v3h-3" />
+        <path d="M16 15a4 4 0 0 1-7 2" />
+        <path d="M9 20v-3h3" />
       </svg>
     );
   }
@@ -2141,6 +2169,75 @@ function parseDateTime(value?: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+type MaintenanceExpiryReminder = {
+  job: Job;
+  startDate: Date | null;
+  expiryDate: Date;
+  daysUntilExpiry: number;
+};
+
+const MAINTENANCE_DATE_TOKEN_PATTERN =
+  /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4}/g;
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function subtractCalendarMonths(date: Date, months: number) {
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth() - months;
+  const targetDay = date.getDate();
+  const lastDayOfTargetMonth = new Date(
+    targetYear,
+    targetMonth + 1,
+    0,
+  ).getDate();
+
+  return new Date(
+    targetYear,
+    targetMonth,
+    Math.min(targetDay, lastDayOfTargetMonth),
+  );
+}
+
+function getMaintenanceExpiryReminder(
+  job: Job,
+  today: Date,
+): MaintenanceExpiryReminder | null {
+  const dateTokens = job.maintenanceDuration.match(
+    MAINTENANCE_DATE_TOKEN_PATTERN,
+  );
+  if (!dateTokens?.length) return null;
+
+  const startDate = parseDateTime(dateTokens[0]);
+  const expiryDate = parseDateTime(dateTokens[dateTokens.length - 1]);
+  if (!expiryDate) return null;
+
+  const todayStart = startOfLocalDay(today);
+  const expiryStart = startOfLocalDay(expiryDate);
+  const reminderStart = subtractCalendarMonths(expiryStart, 3);
+  if (todayStart < reminderStart) return null;
+
+  const daysUntilExpiry = Math.round(
+    (expiryStart.getTime() - todayStart.getTime()) / 86_400_000,
+  );
+
+  return {
+    job,
+    startDate: startDate ? startOfLocalDay(startDate) : null,
+    expiryDate: expiryStart,
+    daysUntilExpiry,
+  };
+}
+
+function formatMaintenanceDate(date: Date) {
+  return new Intl.DateTimeFormat("en-MY", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
 function getLatestStatusRemarkTime(value?: string) {
   if (!value?.trim()) return null;
 
@@ -2480,6 +2577,8 @@ export default function DashboardPage() {
   const [currentUserStorageKey, setCurrentUserStorageKey] = useState("");
   const [collapsedModules, setCollapsedModules] =
     useState<CollapsedDashboardModules>(createExpandedDashboardModules);
+  const [collapsedBoardStatuses, setCollapsedBoardStatuses] =
+    useState<CollapsedBoardStatuses>(createExpandedBoardStatuses);
   const [signingOut, setSigningOut] = useState(false);
   const [systemUsesDarkMode, setSystemUsesDarkMode] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -2583,13 +2682,21 @@ export default function DashboardPage() {
     if (!currentUserStorageKey) return;
 
     try {
-      const storageKey = `${COLLAPSED_MODULES_STORAGE_PREFIX}${currentUserStorageKey}`;
-      const saved = window.localStorage.getItem(storageKey);
+      const moduleStorageKey = `${COLLAPSED_MODULES_STORAGE_PREFIX}${currentUserStorageKey}`;
+      const boardStorageKey = `${COLLAPSED_BOARD_STATUSES_STORAGE_PREFIX}${currentUserStorageKey}`;
+      const saved = window.localStorage.getItem(moduleStorageKey);
+      const savedBoardStatuses = window.localStorage.getItem(boardStorageKey);
       setCollapsedModules(
         normalizeCollapsedDashboardModules(saved ? JSON.parse(saved) : null),
       );
+      setCollapsedBoardStatuses(
+        normalizeCollapsedBoardStatuses(
+          savedBoardStatuses ? JSON.parse(savedBoardStatuses) : null,
+        ),
+      );
     } catch {
       setCollapsedModules(createExpandedDashboardModules());
+      setCollapsedBoardStatuses(createExpandedBoardStatuses());
     }
   }, [currentUserStorageKey]);
 
@@ -2599,6 +2706,17 @@ export default function DashboardPage() {
     setCollapsedModules((current) => {
       const next = { ...current, [moduleKey]: !current[moduleKey] };
       const storageKey = `${COLLAPSED_MODULES_STORAGE_PREFIX}${currentUserStorageKey}`;
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function toggleBoardStatus(status: BoardJobStatus) {
+    if (!currentUserStorageKey) return;
+
+    setCollapsedBoardStatuses((current) => {
+      const next = { ...current, [status]: !current[status] };
+      const storageKey = `${COLLAPSED_BOARD_STATUSES_STORAGE_PREFIX}${currentUserStorageKey}`;
       window.localStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     });
@@ -2839,6 +2957,20 @@ export default function DashboardPage() {
   const orderedJobs = useMemo(
     () => [...jobs].sort(compareJobsByNewest),
     [jobs],
+  );
+
+  const maintenanceExpiryReminders = useMemo(
+    () =>
+      orderedJobs
+        .map((job) => getMaintenanceExpiryReminder(job, today))
+        .filter(
+          (reminder): reminder is MaintenanceExpiryReminder =>
+            reminder !== null,
+        )
+        .sort(
+          (a, b) => a.expiryDate.getTime() - b.expiryDate.getTime(),
+        ),
+    [orderedJobs, today],
   );
 
   /*
@@ -3304,6 +3436,11 @@ export default function DashboardPage() {
                 <StatisticCard key={card.status} {...card} />
               ))}
           </div>
+
+          <MaintenanceExpiryCard
+            reminders={maintenanceExpiryReminders}
+            onOpenJob={openJobDetails}
+          />
             </>
           )}
         </section>
@@ -3525,8 +3662,8 @@ export default function DashboardPage() {
           className="mt-8"
           style={{ order: settings.dashboardModuleOrder.indexOf("job-progress") }}
         >
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div className="shrink-0">
+          <div className="grid gap-4 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,2.35fr)_auto] xl:items-center">
+            <div className="min-w-0">
               <div>
               <h2 className="text-lg font-semibold text-slate-950">
                 Job Progress Board
@@ -3542,23 +3679,23 @@ export default function DashboardPage() {
             </div>
 
             {!collapsedModules["job-progress"] && settings.showStageLegend && (
-              <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:ml-auto xl:max-w-[68rem] xl:flex-1">
+              <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:pl-7">
                 <div>
                   <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     Stage Legend
                   </p>
 
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-5">
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-[repeat(5,minmax(0,1fr))]">
                     {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
-                        className="flex shrink-0 items-center gap-2"
+                        className="flex min-w-0 items-start gap-2"
                       >
                         <span
-                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
+                          className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
                         />
 
-                        <span className="whitespace-nowrap text-xs font-medium text-slate-600">
+                        <span className="min-w-0 break-words text-xs font-semibold leading-4 text-slate-600">
                           {displayLabels[status]}
                         </span>
                       </div>
@@ -3580,7 +3717,7 @@ export default function DashboardPage() {
 
           {settings.showSummary && (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <div className="flex flex-col gap-3 2xl:flex-row 2xl:flex-nowrap 2xl:items-center">
+              <div className="grid gap-3 2xl:grid-cols-[20rem_minmax(0,1fr)_auto] 2xl:items-center">
                 <label className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="whitespace-nowrap">Filter:</span>
                   <select
@@ -3598,12 +3735,12 @@ export default function DashboardPage() {
                   </select>
                 </label>
 
-                <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className="flex min-w-0 items-start gap-4 2xl:pl-4">
                   <p className="shrink-0 text-sm font-semibold text-slate-700">
                     Summary:
                   </p>
 
-                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-5">
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-[repeat(5,minmax(0,1fr))]">
                     {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
@@ -3780,14 +3917,22 @@ export default function DashboardPage() {
                       </div>
 
                       <span
-                        className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold ${styles.badge}`}
+                        className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-bold ${styles.badge}`}
                       >
                         {statusJobs.length}{" "}
                         {statusJobs.length === 1 ? "job" : "jobs"}
                       </span>
+
+                      <ModuleCollapseButton
+                        moduleName={`${displayLabels[status]} board`}
+                        isCollapsed={collapsedBoardStatuses[status]}
+                        onToggle={() => toggleBoardStatus(status)}
+                      />
                     </div>
                   </div>
 
+                  {!collapsedBoardStatuses[status] && (
+                    <>
                   <div className="p-3 sm:p-4">
                     {statusJobs.length > 0 ? (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -3961,6 +4106,8 @@ export default function DashboardPage() {
                       savePaginationDefault(status, pagination.pageSize)
                     }
                   />
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -4427,6 +4574,120 @@ function DateTimeDisplayRow({
    Statistic Card
 ========================================================= */
 
+function MaintenanceReminderIcon({ className = "h-6 w-6" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 3a9 9 0 1 0 9 9" />
+      <path d="M21 3v6h-6" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function MaintenanceExpiryCard({
+  reminders,
+  onOpenJob,
+}: {
+  reminders: MaintenanceExpiryReminder[];
+  onOpenJob: (job: Job) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 border-teal-200 bg-white shadow-md">
+      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
+            <MaintenanceReminderIcon />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900">
+              Maintenance Expiry Reminder
+            </h3>
+            <p className="mt-1 text-xs font-semibold text-slate-600">
+              Appears three months before the maintenance end date
+            </p>
+          </div>
+        </div>
+
+        <span className="w-fit rounded-full bg-teal-500 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm">
+          {reminders.length} {reminders.length === 1 ? "job" : "jobs"}
+        </span>
+      </div>
+
+      {reminders.length > 0 ? (
+        <div className="max-h-[390px] divide-y divide-slate-100 overflow-y-auto overscroll-contain">
+          {reminders.map(({ job, startDate, expiryDate, daysUntilExpiry }) => {
+            const isExpired = daysUntilExpiry < 0;
+            const timingLabel = isExpired
+              ? `Expired ${Math.abs(daysUntilExpiry)} day${Math.abs(daysUntilExpiry) === 1 ? "" : "s"} ago`
+              : daysUntilExpiry === 0
+                ? "Expires today"
+                : `Expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`;
+
+            return (
+              <button
+                key={`${job.jobId}-${expiryDate.getTime()}`}
+                type="button"
+                onClick={() => onOpenJob(job)}
+                className="grid w-full gap-3 px-5 py-4 text-left transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-inset focus:ring-teal-500/15 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-blue-600">
+                    {job.jobId || "-"}
+                  </p>
+                  <p className="mt-1 break-words text-sm font-extrabold text-slate-900">
+                    {job.customerCompanyName || job.customerName || "-"}
+                  </p>
+                  {job.customerName && job.customerCompanyName && (
+                    <p className="mt-1 break-words text-xs font-semibold text-slate-500">
+                      {job.customerName}
+                    </p>
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                    Maintenance Duration
+                  </p>
+                  <p className="mt-1 break-words text-sm font-bold text-slate-700">
+                    {startDate
+                      ? `${formatMaintenanceDate(startDate)} – ${formatMaintenanceDate(expiryDate)}`
+                      : formatMaintenanceDate(expiryDate)}
+                  </p>
+                </div>
+
+                <span
+                  className={`w-fit rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                    isExpired
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-teal-100 text-teal-800"
+                  }`}
+                >
+                  {timingLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="px-5 py-8 text-center">
+          <p className="text-sm font-bold text-slate-500">
+            No maintenance periods are due within the next three months.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatisticCard({
   status,
   label,
@@ -4439,13 +4700,13 @@ function StatisticCard({
   hex: string;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg">
       <div
         className="absolute inset-y-0 left-0 w-1.5"
         style={{ backgroundColor: hex }}
       />
 
-      <div className="flex min-h-[100px] items-center justify-between gap-3 p-4 pl-5 sm:min-h-[112px] sm:gap-4 sm:p-5 sm:pl-6">
+      <div className="flex min-h-[112px] items-center justify-between gap-3 p-4 pl-5 sm:min-h-[124px] sm:gap-4 sm:p-5 sm:pl-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span
@@ -4453,12 +4714,12 @@ function StatisticCard({
               style={{ backgroundColor: hex }}
             />
 
-            <p className="truncate text-sm font-semibold text-slate-700">
+            <p className="break-words text-sm font-extrabold leading-5 text-slate-800">
               {label}
             </p>
           </div>
 
-          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:mt-3 sm:text-3xl">
+          <p className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950 sm:mt-3 sm:text-3xl">
             {value}
           </p>
         </div>
