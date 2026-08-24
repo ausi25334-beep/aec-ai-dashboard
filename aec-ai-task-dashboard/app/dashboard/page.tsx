@@ -2173,7 +2173,6 @@ type MaintenanceExpiryReminder = {
   job: Job;
   startDate: Date | null;
   expiryDate: Date;
-  daysUntilExpiry: number;
 };
 
 const MAINTENANCE_DATE_TOKEN_PATTERN =
@@ -2238,15 +2237,10 @@ function getMaintenanceExpiryReminder(
   // after expiry. The item disappears on the day after that overdue period.
   if (todayStart < reminderStart || todayStart > overdueEnd) return null;
 
-  const daysUntilExpiry = Math.round(
-    (expiryStart.getTime() - todayStart.getTime()) / 86_400_000,
-  );
-
   return {
     job,
     startDate: startDate ? startOfLocalDay(startDate) : null,
     expiryDate: expiryStart,
-    daysUntilExpiry,
   };
 }
 
@@ -4643,15 +4637,7 @@ function MaintenanceExpiryCard({
 
       {reminders.length > 0 ? (
         <div className="max-h-[390px] flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
-          {reminders.map(({ job, startDate, expiryDate, daysUntilExpiry }) => {
-            const timingLabel =
-              daysUntilExpiry === 0
-                ? "Expiry Today"
-                : daysUntilExpiry < 0
-                  ? "Overdue"
-                : `Expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`;
-            const isOverdue = daysUntilExpiry < 0;
-
+          {reminders.map(({ job, startDate, expiryDate }) => {
             return (
               <button
                 key={`${job.jobId}-${expiryDate.getTime()}`}
@@ -4680,13 +4666,9 @@ function MaintenanceExpiryCard({
                 </div>
 
                 <span
-                  className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-extrabold ${
-                    isOverdue
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-teal-100 text-teal-800"
-                  }`}
+                  className="inline-flex w-fit rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-800"
                 >
-                  {timingLabel}
+                  Overdue
                 </span>
               </button>
             );
