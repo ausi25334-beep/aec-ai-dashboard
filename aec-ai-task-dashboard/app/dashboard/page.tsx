@@ -3423,7 +3423,12 @@ export default function DashboardPage() {
               ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+            <MaintenanceExpiryCard
+              reminders={maintenanceExpiryReminders}
+              onOpenJob={openJobDetails}
+            />
+
             {settings.statisticCardOrder.slice(4).map((status) =>
               statisticCards.find((card) => card.status === status),
             )
@@ -3436,11 +3441,6 @@ export default function DashboardPage() {
                 <StatisticCard key={card.status} {...card} />
               ))}
           </div>
-
-          <MaintenanceExpiryCard
-            reminders={maintenanceExpiryReminders}
-            onOpenJob={openJobDetails}
-          />
             </>
           )}
         </section>
@@ -3663,7 +3663,7 @@ export default function DashboardPage() {
           style={{ order: settings.dashboardModuleOrder.indexOf("job-progress") }}
         >
           <div className="grid gap-4 xl:grid-cols-[minmax(20rem,0.85fr)_minmax(0,2.35fr)_auto] xl:items-center">
-            <div className="min-w-0">
+            <div className="min-w-0 pl-3 sm:pl-5">
               <div>
               <h2 className="text-lg font-semibold text-slate-950">
                 Job Progress Board
@@ -3679,17 +3679,23 @@ export default function DashboardPage() {
             </div>
 
             {!collapsedModules["job-progress"] && settings.showStageLegend && (
-              <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-5 xl:pl-7">
+              <div className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm xl:px-7">
                 <div>
                   <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     Stage Legend
                   </p>
 
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-[repeat(5,minmax(0,1fr))]">
-                    {JOB_STATUSES.map((status) => (
+                    {JOB_STATUSES.map((status, index) => (
                       <div
                         key={status}
-                        className="flex min-w-0 items-start gap-2"
+                        className={`flex min-w-0 items-start gap-2 sm:w-fit ${
+                          index % 5 === 0
+                            ? "sm:justify-self-start"
+                            : index % 5 === 4
+                              ? "sm:justify-self-end"
+                              : "sm:justify-self-center"
+                        }`}
                       >
                         <span
                           className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
@@ -4574,25 +4580,6 @@ function DateTimeDisplayRow({
    Statistic Card
 ========================================================= */
 
-function MaintenanceReminderIcon({ className = "h-6 w-6" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M12 3a9 9 0 1 0 9 9" />
-      <path d="M21 3v6h-6" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
 function MaintenanceExpiryCard({
   reminders,
   onOpenJob,
@@ -4601,29 +4588,21 @@ function MaintenanceExpiryCard({
   onOpenJob: (job: Job) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border-2 border-teal-200 bg-white shadow-md">
-      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-500 text-white shadow-lg shadow-teal-500/20">
-            <MaintenanceReminderIcon />
-          </div>
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900">
-              Maintenance Expiry Reminder
-            </h3>
-            <p className="mt-1 text-xs font-semibold text-slate-600">
-              Appears three months before the maintenance end date
-            </p>
-          </div>
-        </div>
+    <div className="relative flex min-h-[124px] flex-col overflow-hidden rounded-2xl border-2 border-teal-200 bg-white shadow-md">
+      <div className="absolute inset-y-0 left-0 w-1.5 bg-teal-500" />
 
-        <span className="w-fit rounded-full bg-teal-500 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm">
-          {reminders.length} {reminders.length === 1 ? "job" : "jobs"}
+      <div className="flex items-start justify-between gap-2 border-b border-teal-100 bg-teal-50/70 py-4 pl-5 pr-4">
+        <h3 className="break-words text-sm font-extrabold leading-5 text-slate-900">
+          Maintenance Expiry Reminder
+        </h3>
+
+        <span className="shrink-0 rounded-full bg-teal-500 px-2.5 py-1 text-[11px] font-extrabold text-white shadow-sm">
+          {reminders.length}
         </span>
       </div>
 
       {reminders.length > 0 ? (
-        <div className="max-h-[390px] divide-y divide-slate-100 overflow-y-auto overscroll-contain">
+        <div className="max-h-[265px] flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
           {reminders.map(({ job, startDate, expiryDate, daysUntilExpiry }) => {
             const isExpired = daysUntilExpiry < 0;
             const timingLabel = isExpired
@@ -4637,7 +4616,7 @@ function MaintenanceExpiryCard({
                 key={`${job.jobId}-${expiryDate.getTime()}`}
                 type="button"
                 onClick={() => onOpenJob(job)}
-                className="grid w-full gap-3 px-5 py-4 text-left transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-inset focus:ring-teal-500/15 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto] sm:items-center"
+                className="w-full px-4 py-3 pl-5 text-left transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-inset focus:ring-teal-500/15"
               >
                 <div className="min-w-0">
                   <p className="text-xs font-extrabold text-blue-600">
@@ -4646,14 +4625,9 @@ function MaintenanceExpiryCard({
                   <p className="mt-1 break-words text-sm font-extrabold text-slate-900">
                     {job.customerCompanyName || job.customerName || "-"}
                   </p>
-                  {job.customerName && job.customerCompanyName && (
-                    <p className="mt-1 break-words text-xs font-semibold text-slate-500">
-                      {job.customerName}
-                    </p>
-                  )}
                 </div>
 
-                <div className="min-w-0">
+                <div className="mt-2 min-w-0">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
                     Maintenance Duration
                   </p>
@@ -4665,7 +4639,7 @@ function MaintenanceExpiryCard({
                 </div>
 
                 <span
-                  className={`w-fit rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                  className={`mt-2 inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
                     isExpired
                       ? "bg-amber-100 text-amber-800"
                       : "bg-teal-100 text-teal-800"
@@ -4678,9 +4652,9 @@ function MaintenanceExpiryCard({
           })}
         </div>
       ) : (
-        <div className="px-5 py-8 text-center">
-          <p className="text-sm font-bold text-slate-500">
-            No maintenance periods are due within the next three months.
+        <div className="flex flex-1 items-center px-5 py-5 text-center">
+          <p className="w-full text-xs font-bold leading-5 text-slate-500">
+            No maintenance expiry reminders.
           </p>
         </div>
       )}
@@ -4714,9 +4688,17 @@ function StatisticCard({
               style={{ backgroundColor: hex }}
             />
 
-            <p className="break-words text-sm font-extrabold leading-5 text-slate-800">
-              {label}
-            </p>
+            {status === "Maintenance and Renewals" ? (
+              <p className="text-sm font-extrabold leading-5 text-slate-800">
+                <span className="whitespace-nowrap">Maintenance &amp;</span>
+                <br />
+                Renewals
+              </p>
+            ) : (
+              <p className="break-words text-sm font-extrabold leading-5 text-slate-800">
+                {label}
+              </p>
+            )}
           </div>
 
           <p className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950 sm:mt-3 sm:text-3xl">
