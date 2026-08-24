@@ -2749,6 +2749,44 @@ export default function DashboardPage() {
     });
   }
 
+  function scrollToStatusBoard(status: BoardJobStatus) {
+    setCollapsedModules((current) => {
+      if (!current["job-progress"]) return current;
+
+      const next = { ...current, "job-progress": false };
+      if (currentUserStorageKey) {
+        const storageKey = `${COLLAPSED_MODULES_STORAGE_PREFIX}${currentUserStorageKey}`;
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    setCollapsedBoardStatuses((current) => {
+      if (!current[status]) return current;
+
+      const next = { ...current, [status]: false };
+      if (currentUserStorageKey) {
+        const storageKey = `${COLLAPSED_BOARD_STATUSES_STORAGE_PREFIX}${currentUserStorageKey}`;
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    /*
+      Wait for React to render any newly expanded module/board before locating
+      it. Two animation frames keep the scroll reliable even when both levels
+      were collapsed.
+    */
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const board = document.querySelector<HTMLElement>(
+          `[data-job-progress-status="${encodeURIComponent(status)}"]`,
+        );
+        board?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+
   useEffect(() => {
     if (!currentUserName) return;
 
@@ -3446,7 +3484,11 @@ export default function DashboardPage() {
                 ): card is (typeof statisticCards)[number] => card !== undefined,
               )
               .map((card) => (
-                <StatisticCard key={card.status} {...card} />
+                <StatisticCard
+                  key={card.status}
+                  {...card}
+                  onAction={() => scrollToStatusBoard(card.status)}
+                />
               ))}
           </div>
 
@@ -3460,7 +3502,11 @@ export default function DashboardPage() {
                 ): card is (typeof statisticCards)[number] => card !== undefined,
               )
               .map((card) => (
-                <StatisticCard key={card.status} {...card} />
+                <StatisticCard
+                  key={card.status}
+                  {...card}
+                  onAction={() => scrollToStatusBoard(card.status)}
+                />
               ))}
           </div>
 
@@ -3838,7 +3884,8 @@ export default function DashboardPage() {
               return (
                 <div
                   key={status}
-                  className={`overflow-hidden rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm ${styles.leftBorder}`}
+                  data-job-progress-status={encodeURIComponent(status)}
+                  className={`scroll-mt-24 overflow-hidden rounded-2xl border border-l-4 border-slate-200 bg-white shadow-sm ${styles.leftBorder}`}
                 >
                   <div className="flex min-h-[72px] flex-col items-start justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
                     <div className="flex items-center gap-3">
@@ -4677,14 +4724,22 @@ function StatisticCard({
   label,
   value,
   hex,
+  onAction,
 }: {
-  status: JobStatus;
+  status: BoardJobStatus;
   label: string;
   value: number;
   hex: string;
+  onAction: () => void;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border-2 border-slate-200 bg-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg">
+    <button
+      type="button"
+      onClick={onAction}
+      aria-label={`Go to ${label} board`}
+      title={`Go to ${label} board`}
+      className="relative w-full overflow-hidden rounded-2xl border-2 border-slate-200 bg-white text-left shadow-md transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+    >
       <div
         className="absolute inset-y-0 left-0 w-1.5"
         style={{ backgroundColor: hex }}
@@ -4726,7 +4781,7 @@ function StatisticCard({
           <StatusIcon status={status} />
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
