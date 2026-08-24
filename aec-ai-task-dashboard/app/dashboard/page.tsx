@@ -2173,10 +2173,45 @@ type MaintenanceExpiryReminder = {
   job: Job;
   startDate: Date | null;
   expiryDate: Date;
+  daysUntilExpiry: number;
 };
 
 const MAINTENANCE_DATE_TOKEN_PATTERN =
   /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4}/g;
+
+const MAINTENANCE_REMINDER_MONTHS_BEFORE_EXPIRY = 3;
+const MALAYSIA_TIME_ZONE = "Asia/Kuala_Lumpur";
+const MALAYSIA_UTC_OFFSET_MILLISECONDS = 8 * 60 * 60 * 1_000;
+
+function getMalaysiaDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MALAYSIA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const getPart = (type: "year" | "month" | "day") =>
+    Number(parts.find((part) => part.type === type)?.value);
+
+  return {
+    year: getPart("year"),
+    month: getPart("month"),
+    day: getPart("day"),
+  };
+}
+
+function getMalaysiaToday(date = new Date()) {
+  const { year, month, day } = getMalaysiaDateParts(date);
+  return new Date(year, month - 1, day);
+}
+
+function millisecondsUntilNextMalaysiaDay(date = new Date()) {
+  const { year, month, day } = getMalaysiaDateParts(date);
+  const nextMalaysiaMidnightUtc =
+    Date.UTC(year, month - 1, day + 1) - MALAYSIA_UTC_OFFSET_MILLISECONDS;
+
+  return Math.max(1_000, nextMalaysiaMidnightUtc - date.getTime());
+}
 
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -2203,6 +2238,21 @@ function addCalendarDays(date: Date, days: number) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
+function differenceInCalendarDays(laterDate: Date, earlierDate: Date) {
+  const laterUtc = Date.UTC(
+    laterDate.getFullYear(),
+    laterDate.getMonth(),
+    laterDate.getDate(),
+  );
+  const earlierUtc = Date.UTC(
+    earlierDate.getFullYear(),
+    earlierDate.getMonth(),
+    earlierDate.getDate(),
+  );
+
+  return Math.round((laterUtc - earlierUtc) / 86_400_000);
+}
+
 function getMaintenanceExpiryReminder(
   job: Job,
   today: Date,
@@ -2218,7 +2268,10 @@ function getMaintenanceExpiryReminder(
 
   const todayStart = startOfLocalDay(today);
   const expiryStart = startOfLocalDay(expiryDate);
-  const reminderStart = subtractCalendarMonths(expiryStart, 3);
+  const reminderStart = subtractCalendarMonths(
+    expiryStart,
+    MAINTENANCE_REMINDER_MONTHS_BEFORE_EXPIRY,
+  );
   const overdueEnd = addCalendarDays(expiryStart, 30);
   // Show from three calendar months before expiry through 30 days after
   // expiry. The item disappears automatically on overdue day 31.
@@ -2228,6 +2281,7 @@ function getMaintenanceExpiryReminder(
     job,
     startDate: startDate ? startOfLocalDay(startDate) : null,
     expiryDate: expiryStart,
+    daysUntilExpiry: differenceInCalendarDays(expiryStart, todayStart),
   };
 }
 
@@ -2603,7 +2657,7 @@ export default function DashboardPage() {
     row: number;
   } | null>(null);
 
-  const [today, setToday] = useState(() => new Date());
+  const [today, setToday] = useState(() => getMalaysiaToday());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
 
   useEffect(() => {
@@ -2611,16 +2665,11 @@ export default function DashboardPage() {
 
     const scheduleNextDayRefresh = () => {
       const now = new Date();
-      const nextDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1,
-      );
 
       midnightTimer = window.setTimeout(() => {
-        setToday(new Date());
+        setToday(getMalaysiaToday());
         scheduleNextDayRefresh();
-      }, nextDay.getTime() - now.getTime() + 1_000);
+      }, millisecondsUntilNextMalaysiaDay(now) + 1_000);
     };
 
     scheduleNextDayRefresh();
@@ -4671,8 +4720,24 @@ function MaintenanceExpiryCard({
 
       {reminders.length > 0 ? (
         <div className="max-h-[390px] flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
-          {reminders.map(({ job, startDate, expiryDate }) => {
-            return (
+          {reminders.map(
+            ({ job, startDate, expiryDate, daysUntilExpiry }) => {
+              const expiryLabel =
+                daysUntilExpiry > 0
+                  ? `Expires in ${daysUntilExpiry} ${
+                      daysUntilExpiry === 1 ? "day" : "days"
+                    }`
+                  : daysUntilExpiry === 0
+                    ? "Expires today"
+                    : "Overdue";
+              const expiryBadgeStyle =
+                daysUntilExpiry > 0
+                  ? "bg-teal-100 text-teal-800"
+                  : daysUntilExpiry === 0
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-yellow-100 text-yellow-800";
+
+              return (
               <button
                 key={`${job.jobId}-${expiryDate.getTime()}`}
                 type="button"
@@ -4700,13 +4765,14 @@ function MaintenanceExpiryCard({
                 </div>
 
                 <span
-                  className="inline-flex w-fit rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-800"
+                  className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-extrabold ${expiryBadgeStyle}`}
                 >
-                  Overdue
+                  {expiryLabel}
                 </span>
               </button>
-            );
-          })}
+              );
+            },
+          )}
         </div>
       ) : (
         <div className="flex flex-1 items-center px-5 py-5 text-center">
