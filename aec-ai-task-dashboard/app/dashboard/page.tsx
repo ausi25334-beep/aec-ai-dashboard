@@ -2200,6 +2200,23 @@ function subtractCalendarMonths(date: Date, months: number) {
   );
 }
 
+function addCalendarMonths(date: Date, months: number) {
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth() + months;
+  const targetDay = date.getDate();
+  const lastDayOfTargetMonth = new Date(
+    targetYear,
+    targetMonth + 1,
+    0,
+  ).getDate();
+
+  return new Date(
+    targetYear,
+    targetMonth,
+    Math.min(targetDay, lastDayOfTargetMonth),
+  );
+}
+
 function getMaintenanceExpiryReminder(
   job: Job,
   today: Date,
@@ -2216,9 +2233,10 @@ function getMaintenanceExpiryReminder(
   const todayStart = startOfLocalDay(today);
   const expiryStart = startOfLocalDay(expiryDate);
   const reminderStart = subtractCalendarMonths(expiryStart, 3);
-  // Show the reminder from three calendar months before expiry through the
-  // expiry date itself. It disappears automatically on the following day.
-  if (todayStart < reminderStart || todayStart > expiryStart) return null;
+  const overdueEnd = addCalendarMonths(expiryStart, 1);
+  // Show from three calendar months before expiry through one calendar month
+  // after expiry. The item disappears on the day after that overdue period.
+  if (todayStart < reminderStart || todayStart > overdueEnd) return null;
 
   const daysUntilExpiry = Math.round(
     (expiryStart.getTime() - todayStart.getTime()) / 86_400_000,
@@ -3708,12 +3726,12 @@ export default function DashboardPage() {
 
             {!collapsedModules["job-progress"] && settings.showStageLegend && (
               <div className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-sm xl:px-7">
-                <div>
+                <div className="xl:mx-auto xl:w-fit">
                   <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                     Stage Legend
                   </p>
 
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-[repeat(5,minmax(0,1fr))]">
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-[repeat(5,minmax(0,1fr))] xl:grid-cols-[repeat(5,max-content)] xl:justify-center xl:gap-x-6 2xl:gap-x-10">
                     {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
@@ -3763,7 +3781,7 @@ export default function DashboardPage() {
                   </select>
                 </label>
 
-                <div className="flex min-w-0 items-start gap-4 2xl:pl-4">
+                <div className="flex min-w-0 items-center gap-4 2xl:pl-4">
                   <p className="shrink-0 text-sm font-semibold text-slate-700">
                     Summary:
                   </p>
@@ -4629,7 +4647,10 @@ function MaintenanceExpiryCard({
             const timingLabel =
               daysUntilExpiry === 0
                 ? "Expiry Today"
+                : daysUntilExpiry < 0
+                  ? "Overdue"
                 : `Expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`;
+            const isOverdue = daysUntilExpiry < 0;
 
             return (
               <button
@@ -4659,7 +4680,11 @@ function MaintenanceExpiryCard({
                 </div>
 
                 <span
-                  className="inline-flex w-fit rounded-full bg-teal-100 px-3 py-1.5 text-xs font-extrabold text-teal-800"
+                  className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                    isOverdue
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-teal-100 text-teal-800"
+                  }`}
                 >
                   {timingLabel}
                 </span>
