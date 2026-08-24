@@ -2216,7 +2216,9 @@ function getMaintenanceExpiryReminder(
   const todayStart = startOfLocalDay(today);
   const expiryStart = startOfLocalDay(expiryDate);
   const reminderStart = subtractCalendarMonths(expiryStart, 3);
-  if (todayStart < reminderStart) return null;
+  // Show the reminder from three calendar months before expiry through the
+  // expiry date itself. It disappears automatically on the following day.
+  if (todayStart < reminderStart || todayStart > expiryStart) return null;
 
   const daysUntilExpiry = Math.round(
     (expiryStart.getTime() - todayStart.getTime()) / 86_400_000,
@@ -2602,8 +2604,34 @@ export default function DashboardPage() {
     row: number;
   } | null>(null);
 
-  const [today] = useState(() => new Date());
+  const [today, setToday] = useState(() => new Date());
   const [calendarDate, setCalendarDate] = useState(() => new Date());
+
+  useEffect(() => {
+    let midnightTimer: number | undefined;
+
+    const scheduleNextDayRefresh = () => {
+      const now = new Date();
+      const nextDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+      );
+
+      midnightTimer = window.setTimeout(() => {
+        setToday(new Date());
+        scheduleNextDayRefresh();
+      }, nextDay.getTime() - now.getTime() + 1_000);
+    };
+
+    scheduleNextDayRefresh();
+
+    return () => {
+      if (midnightTimer !== undefined) {
+        window.clearTimeout(midnightTimer);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setBoardPagination(
@@ -3423,12 +3451,7 @@ export default function DashboardPage() {
               ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
-            <MaintenanceExpiryCard
-              reminders={maintenanceExpiryReminders}
-              onOpenJob={openJobDetails}
-            />
-
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             {settings.statisticCardOrder.slice(4).map((status) =>
               statisticCards.find((card) => card.status === status),
             )
@@ -3441,6 +3464,11 @@ export default function DashboardPage() {
                 <StatisticCard key={card.status} {...card} />
               ))}
           </div>
+
+          <MaintenanceExpiryCard
+            reminders={maintenanceExpiryReminders}
+            onOpenJob={openJobDetails}
+          />
             </>
           )}
         </section>
@@ -3686,16 +3714,10 @@ export default function DashboardPage() {
                   </p>
 
                   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-[repeat(5,minmax(0,1fr))]">
-                    {JOB_STATUSES.map((status, index) => (
+                    {JOB_STATUSES.map((status) => (
                       <div
                         key={status}
-                        className={`flex min-w-0 items-start gap-2 sm:w-fit ${
-                          index % 5 === 0
-                            ? "sm:justify-self-start"
-                            : index % 5 === 4
-                              ? "sm:justify-self-end"
-                              : "sm:justify-self-center"
-                        }`}
+                        className="flex min-w-0 items-start gap-2 sm:justify-self-start"
                       >
                         <span
                           className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${statusStyles[status].dot}`}
@@ -4591,24 +4613,22 @@ function MaintenanceExpiryCard({
     <div className="relative flex min-h-[124px] flex-col overflow-hidden rounded-2xl border-2 border-teal-200 bg-white shadow-md">
       <div className="absolute inset-y-0 left-0 w-1.5 bg-teal-500" />
 
-      <div className="flex items-start justify-between gap-2 border-b border-teal-100 bg-teal-50/70 py-4 pl-5 pr-4">
-        <h3 className="break-words text-sm font-extrabold leading-5 text-slate-900">
+      <div className="flex items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 py-4 pl-6 pr-5">
+        <h3 className="break-words text-base font-extrabold leading-5 text-slate-900">
           Maintenance Expiry Reminder
         </h3>
 
-        <span className="shrink-0 rounded-full bg-teal-500 px-2.5 py-1 text-[11px] font-extrabold text-white shadow-sm">
-          {reminders.length}
+        <span className="shrink-0 rounded-full bg-teal-500 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm">
+          {reminders.length} {reminders.length === 1 ? "job" : "jobs"}
         </span>
       </div>
 
       {reminders.length > 0 ? (
-        <div className="max-h-[265px] flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
+        <div className="max-h-[390px] flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
           {reminders.map(({ job, startDate, expiryDate, daysUntilExpiry }) => {
-            const isExpired = daysUntilExpiry < 0;
-            const timingLabel = isExpired
-              ? `Expired ${Math.abs(daysUntilExpiry)} day${Math.abs(daysUntilExpiry) === 1 ? "" : "s"} ago`
-              : daysUntilExpiry === 0
-                ? "Expires today"
+            const timingLabel =
+              daysUntilExpiry === 0
+                ? "Expiry Today"
                 : `Expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`;
 
             return (
@@ -4616,7 +4636,7 @@ function MaintenanceExpiryCard({
                 key={`${job.jobId}-${expiryDate.getTime()}`}
                 type="button"
                 onClick={() => onOpenJob(job)}
-                className="w-full px-4 py-3 pl-5 text-left transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-inset focus:ring-teal-500/15"
+                className="grid w-full gap-3 px-5 py-4 text-left transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-inset focus:ring-teal-500/15 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto] sm:items-center"
               >
                 <div className="min-w-0">
                   <p className="text-xs font-extrabold text-blue-600">
@@ -4627,7 +4647,7 @@ function MaintenanceExpiryCard({
                   </p>
                 </div>
 
-                <div className="mt-2 min-w-0">
+                <div className="min-w-0">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
                     Maintenance Duration
                   </p>
@@ -4639,11 +4659,7 @@ function MaintenanceExpiryCard({
                 </div>
 
                 <span
-                  className={`mt-2 inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
-                    isExpired
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-teal-100 text-teal-800"
-                  }`}
+                  className="inline-flex w-fit rounded-full bg-teal-100 px-3 py-1.5 text-xs font-extrabold text-teal-800"
                 >
                   {timingLabel}
                 </span>
