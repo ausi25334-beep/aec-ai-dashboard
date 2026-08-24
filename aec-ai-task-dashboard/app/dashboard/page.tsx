@@ -2199,21 +2199,8 @@ function subtractCalendarMonths(date: Date, months: number) {
   );
 }
 
-function addCalendarMonths(date: Date, months: number) {
-  const targetYear = date.getFullYear();
-  const targetMonth = date.getMonth() + months;
-  const targetDay = date.getDate();
-  const lastDayOfTargetMonth = new Date(
-    targetYear,
-    targetMonth + 1,
-    0,
-  ).getDate();
-
-  return new Date(
-    targetYear,
-    targetMonth,
-    Math.min(targetDay, lastDayOfTargetMonth),
-  );
+function addCalendarDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 function getMaintenanceExpiryReminder(
@@ -2232,9 +2219,9 @@ function getMaintenanceExpiryReminder(
   const todayStart = startOfLocalDay(today);
   const expiryStart = startOfLocalDay(expiryDate);
   const reminderStart = subtractCalendarMonths(expiryStart, 3);
-  const overdueEnd = addCalendarMonths(expiryStart, 1);
-  // Show from three calendar months before expiry through one calendar month
-  // after expiry. The item disappears on the day after that overdue period.
+  const overdueEnd = addCalendarDays(expiryStart, 30);
+  // Show from three calendar months before expiry through 30 days after
+  // expiry. The item disappears automatically on overdue day 31.
   if (todayStart < reminderStart || todayStart > overdueEnd) return null;
 
   return {
