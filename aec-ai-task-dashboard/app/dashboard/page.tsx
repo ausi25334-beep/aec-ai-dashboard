@@ -2178,6 +2178,8 @@ type MaintenanceExpiryReminder = {
 const MAINTENANCE_DATE_TOKEN_PATTERN =
   /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4}/g;
 
+const MAINTENANCE_REMINDER_MONTHS_BEFORE_EXPIRY = 3;
+
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -2218,7 +2220,10 @@ function getMaintenanceExpiryReminder(
 
   const todayStart = startOfLocalDay(today);
   const expiryStart = startOfLocalDay(expiryDate);
-  const reminderStart = subtractCalendarMonths(expiryStart, 3);
+  const reminderStart = subtractCalendarMonths(
+    expiryStart,
+    MAINTENANCE_REMINDER_MONTHS_BEFORE_EXPIRY,
+  );
   const overdueEnd = addCalendarDays(expiryStart, 30);
   // Show from three calendar months before expiry through 30 days after
   // expiry. The item disappears automatically on overdue day 31.
