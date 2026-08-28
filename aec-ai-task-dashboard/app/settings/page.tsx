@@ -236,6 +236,7 @@ const SETTINGS_ACCESS_ROLES = [
   "Founder",
   "Principal",
   "General Manager",
+  "Vision Nova Programmer",
 ] as const;
 
 function canManageSettings(role: string | undefined) {
