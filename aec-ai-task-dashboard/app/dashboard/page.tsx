@@ -688,7 +688,7 @@ type DashboardSettings = {
 const SETTINGS_ACCESS_ROLES = [
   "Owner",
   "Founder",
-  "Vision Nova Programmer",
+  "Principal",
   "General Manager",
 ] as const;
 
@@ -2345,15 +2345,9 @@ function compareJobsByColumn(
   return naturalJobSort.compare(aValue, bValue) * multiplier;
 }
 
-function normalizeSearchText(value: unknown) {
-  return String(value ?? "").normalize("NFKC").toLocaleLowerCase();
-}
-
-function normalizePhoneSearch(value: unknown) {
-  return String(value ?? "").replace(/\D/g, "");
-}
-
 function jobMatchesGlobalSearch(job: Job, query: string) {
+  const normalizeSearchText = (value: unknown) =>
+    String(value ?? "").normalize("NFKC").toLocaleLowerCase();
   const normalizedQuery = normalizeSearchText(query.trim());
 
   if (!normalizedQuery) return true;
@@ -2374,60 +2368,21 @@ function jobMatchesGlobalSearch(job: Job, query: string) {
     Complete: "complete completed",
   };
   /*
-    The two Dashboard search areas support Job ID, Customer Company Name,
-    Customer Name and Customer Phone. Status matching remains available for
-    backwards compatibility. Phone matching ignores formatting characters so
-    a query such as 0184065844 can match +60 18-406 5844.
+    Search suggestions show "Job ID - Customer Company Name", so matching is
+    intentionally limited to fields the user can see and verify there, plus
+    Status for the dashboard's status search. This is a literal, contiguous,
+    case-insensitive match (Ctrl+F behaviour), not fuzzy/token matching.
   */
   const searchableValues = [
     job.jobId,
     job.customerCompanyName,
-    job.customerName,
-    job.customerPhone,
     displayLabels[job.status],
     statusAliases[job.status],
   ];
 
-  if (
-    searchableValues.some((value) =>
-      normalizeSearchText(value).includes(normalizedQuery),
-    )
-  ) {
-    return true;
-  }
-
-  const normalizedPhoneQuery = normalizePhoneSearch(query);
-  return Boolean(
-    normalizedPhoneQuery &&
-      normalizePhoneSearch(job.customerPhone).includes(normalizedPhoneQuery),
+  return searchableValues.some((value) =>
+    normalizeSearchText(value).includes(normalizedQuery),
   );
-}
-
-function getSearchSuggestionValue(job: Job, query: string) {
-  const normalizedQuery = normalizeSearchText(query.trim());
-  const normalizedPhoneQuery = normalizePhoneSearch(query);
-
-  if (normalizeSearchText(job.jobId).includes(normalizedQuery)) {
-    return job.customerCompanyName || "-";
-  }
-
-  if (normalizeSearchText(job.customerCompanyName).includes(normalizedQuery)) {
-    return job.customerCompanyName || "-";
-  }
-
-  if (normalizeSearchText(job.customerName).includes(normalizedQuery)) {
-    return job.customerName || "-";
-  }
-
-  if (
-    normalizeSearchText(job.customerPhone).includes(normalizedQuery) ||
-    (normalizedPhoneQuery &&
-      normalizePhoneSearch(job.customerPhone).includes(normalizedPhoneQuery))
-  ) {
-    return job.customerPhone || "-";
-  }
-
-  return job.customerCompanyName || "-";
 }
 
 function getCalendarCompanyFontSize(companyName?: string) {
@@ -3432,7 +3387,7 @@ export default function DashboardPage() {
                         </span>
                         <span className="mx-2 text-slate-300">-</span>
                         <span className="min-w-0 truncate">
-                          {getSearchSuggestionValue(job, globalSearch)}
+                          {job.customerCompanyName || "-"}
                         </span>
                       </button>
                     ))
@@ -4022,7 +3977,7 @@ export default function DashboardPage() {
                                     </span>
                                     <span className="mx-2 text-slate-300">-</span>
                                     <span className="min-w-0 truncate">
-                                      {getSearchSuggestionValue(job, boardQuery)}
+                                      {job.customerCompanyName || "-"}
                                     </span>
                                   </button>
                                 ))
