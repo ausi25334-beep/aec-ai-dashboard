@@ -690,6 +690,7 @@ const SETTINGS_ACCESS_ROLES = [
   "Founder",
   "Principal",
   "General Manager",
+  "Vision Nova Programmer",
 ] as const;
 
 function canManageSettings(role: string) {
@@ -2173,34 +2174,78 @@ type MaintenanceExpiryReminder = {
   job: Job;
   startDate: Date | null;
   expiryDate: Date;
+  timing: "expiring" | "today" | "overdue";
+  timingLabel: string;
 };
 
 const MAINTENANCE_DATE_TOKEN_PATTERN =
   /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4}/g;
+const MALAYSIA_TIME_ZONE = "Asia/Kuala_Lumpur";
+const MALAYSIA_UTC_OFFSET_HOURS = 8;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1_000;
 
-function startOfLocalDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function createUtcDateOnly(year: number, month: number, day: number) {
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
-function subtractCalendarMonths(date: Date, months: number) {
-  const targetYear = date.getFullYear();
-  const targetMonth = date.getMonth() - months;
-  const targetDay = date.getDate();
-  const lastDayOfTargetMonth = new Date(
-    targetYear,
-    targetMonth + 1,
-    0,
-  ).getDate();
+function parseMaintenanceDate(value: string) {
+  const parts = parseDateTimeParts(value);
 
-  return new Date(
-    targetYear,
-    targetMonth,
-    Math.min(targetDay, lastDayOfTargetMonth),
+  if (!parts) return null;
+
+  return createUtcDateOnly(parts.year, parts.month, parts.day);
+}
+
+function getMalaysiaDate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MALAYSIA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const partValues = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+
+  return createUtcDateOnly(
+    Number(partValues.year),
+    Number(partValues.month),
+    Number(partValues.day),
   );
 }
 
+function getMillisecondsUntilNextMalaysiaDay(date = new Date()) {
+  const malaysiaDate = getMalaysiaDate(date);
+  const nextMalaysiaMidnightUtc = Date.UTC(
+    malaysiaDate.getUTCFullYear(),
+    malaysiaDate.getUTCMonth(),
+    malaysiaDate.getUTCDate() + 1,
+  ) - MALAYSIA_UTC_OFFSET_HOURS * 60 * 60 * 1_000;
+
+  return Math.max(1_000, nextMalaysiaMidnightUtc - date.getTime() + 1_000);
+}
+
+function subtractCalendarMonths(date: Date, months: number) {
+  const targetYear = date.getUTCFullYear();
+  const targetMonth = date.getUTCMonth() - months;
+  const targetDay = date.getUTCDate();
+  const lastDayOfTargetMonth = new Date(Date.UTC(
+    targetYear,
+    targetMonth + 1,
+    0,
+  )).getUTCDate();
+
+  return new Date(Date.UTC(
+    targetYear,
+    targetMonth,
+    Math.min(targetDay, lastDayOfTargetMonth),
+  ));
+}
+
 function addCalendarDays(date: Date, days: number) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days),
+  );
 }
 
 function getMaintenanceExpiryReminder(
@@ -2212,27 +2257,46 @@ function getMaintenanceExpiryReminder(
   );
   if (!dateTokens?.length) return null;
 
-  const startDate = parseDateTime(dateTokens[0]);
-  const expiryDate = parseDateTime(dateTokens[dateTokens.length - 1]);
+  const startDate = parseMaintenanceDate(dateTokens[0]);
+  const expiryDate = parseMaintenanceDate(dateTokens[dateTokens.length - 1]);
   if (!expiryDate) return null;
 
-  const todayStart = startOfLocalDay(today);
-  const expiryStart = startOfLocalDay(expiryDate);
+  const todayStart = getMalaysiaDate(today);
+  const expiryStart = expiryDate;
   const reminderStart = subtractCalendarMonths(expiryStart, 3);
   const overdueEnd = addCalendarDays(expiryStart, 30);
   // Show from three calendar months before expiry through 30 days after
   // expiry. The item disappears automatically on overdue day 31.
   if (todayStart < reminderStart || todayStart > overdueEnd) return null;
 
+  const daysUntilExpiry = Math.round(
+    (expiryStart.getTime() - todayStart.getTime()) / MILLISECONDS_PER_DAY,
+  );
+  const timing =
+    daysUntilExpiry > 0
+      ? "expiring"
+      : daysUntilExpiry === 0
+        ? "today"
+        : "overdue";
+  const timingLabel =
+    daysUntilExpiry > 0
+      ? `Expires in ${daysUntilExpiry} ${daysUntilExpiry === 1 ? "day" : "days"}`
+      : daysUntilExpiry === 0
+        ? "Expires today"
+        : "Overdue";
+
   return {
     job,
-    startDate: startDate ? startOfLocalDay(startDate) : null,
+    startDate,
     expiryDate: expiryStart,
+    timing,
+    timingLabel,
   };
 }
 
 function formatMaintenanceDate(date: Date) {
   return new Intl.DateTimeFormat("en-MY", {
+    timeZone: "UTC",
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -2345,9 +2409,15 @@ function compareJobsByColumn(
   return naturalJobSort.compare(aValue, bValue) * multiplier;
 }
 
+function normalizeSearchText(value: unknown) {
+  return String(value ?? "").normalize("NFKC").toLocaleLowerCase();
+}
+
+function normalizePhoneSearch(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 function jobMatchesGlobalSearch(job: Job, query: string) {
-  const normalizeSearchText = (value: unknown) =>
-    String(value ?? "").normalize("NFKC").toLocaleLowerCase();
   const normalizedQuery = normalizeSearchText(query.trim());
 
   if (!normalizedQuery) return true;
@@ -2368,21 +2438,61 @@ function jobMatchesGlobalSearch(job: Job, query: string) {
     Complete: "complete completed",
   };
   /*
-    Search suggestions show "Job ID - Customer Company Name", so matching is
-    intentionally limited to fields the user can see and verify there, plus
-    Status for the dashboard's status search. This is a literal, contiguous,
-    case-insensitive match (Ctrl+F behaviour), not fuzzy/token matching.
+    The two Dashboard search areas support Job ID, Customer Company Name,
+    Customer Name and Customer Phone. Status matching remains available for
+    backwards compatibility. Phone matching ignores formatting characters so
+    a query such as 0184065844 can match +60 18-406 5844.
   */
   const searchableValues = [
     job.jobId,
     job.customerCompanyName,
+    job.customerName,
+    job.customerPhone,
     displayLabels[job.status],
     statusAliases[job.status],
   ];
 
-  return searchableValues.some((value) =>
-    normalizeSearchText(value).includes(normalizedQuery),
+  if (
+    searchableValues.some((value) =>
+      normalizeSearchText(value).includes(normalizedQuery),
+    )
+  ) {
+    return true;
+  }
+
+  const normalizedPhoneQuery = normalizePhoneSearch(query);
+  return Boolean(
+    normalizedPhoneQuery &&
+      normalizePhoneSearch(job.customerPhone).includes(normalizedPhoneQuery),
   );
+}
+
+function getSearchSuggestionValue(job: Job, query: string) {
+  const normalizedQuery = normalizeSearchText(query.trim());
+  const normalizedPhoneQuery = normalizePhoneSearch(query);
+  const companyName = job.customerCompanyName || "-";
+
+  if (normalizeSearchText(job.jobId).includes(normalizedQuery)) {
+    return companyName;
+  }
+
+  if (normalizeSearchText(job.customerCompanyName).includes(normalizedQuery)) {
+    return companyName;
+  }
+
+  if (normalizeSearchText(job.customerName).includes(normalizedQuery)) {
+    return [companyName, job.customerName || "-"].join(" - ");
+  }
+
+  if (
+    normalizeSearchText(job.customerPhone).includes(normalizedQuery) ||
+    (normalizedPhoneQuery &&
+      normalizePhoneSearch(job.customerPhone).includes(normalizedPhoneQuery))
+  ) {
+    return [companyName, job.customerPhone || "-"].join(" - ");
+  }
+
+  return companyName;
 }
 
 function getCalendarCompanyFontSize(companyName?: string) {
@@ -2611,16 +2721,11 @@ export default function DashboardPage() {
 
     const scheduleNextDayRefresh = () => {
       const now = new Date();
-      const nextDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1,
-      );
 
       midnightTimer = window.setTimeout(() => {
         setToday(new Date());
         scheduleNextDayRefresh();
-      }, nextDay.getTime() - now.getTime() + 1_000);
+      }, getMillisecondsUntilNextMalaysiaDay(now));
     };
 
     scheduleNextDayRefresh();
@@ -3301,7 +3406,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap sm:gap-3">
-            <div className="relative order-first w-full sm:w-64 lg:w-80">
+            <div className="relative order-first w-full sm:w-80 lg:w-[28rem]">
               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
                 <SearchIcon />
               </span>
@@ -3386,8 +3491,8 @@ export default function DashboardPage() {
                           {job.jobId || "-"}
                         </span>
                         <span className="mx-2 text-slate-300">-</span>
-                        <span className="min-w-0 truncate">
-                          {job.customerCompanyName || "-"}
+                        <span className="min-w-0 break-words">
+                          {getSearchSuggestionValue(job, globalSearch)}
                         </span>
                       </button>
                     ))
@@ -3913,7 +4018,7 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
-                      <div className="relative w-full sm:w-64">
+                      <div className="relative w-full sm:w-80 lg:w-96">
                         <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
                           <SearchIcon />
                         </span>
@@ -3976,8 +4081,8 @@ export default function DashboardPage() {
                                       {job.jobId || "-"}
                                     </span>
                                     <span className="mx-2 text-slate-300">-</span>
-                                    <span className="min-w-0 truncate">
-                                      {job.customerCompanyName || "-"}
+                                    <span className="min-w-0 break-words">
+                                      {getSearchSuggestionValue(job, boardQuery)}
                                     </span>
                                   </button>
                                 ))
@@ -4671,7 +4776,8 @@ function MaintenanceExpiryCard({
 
       {reminders.length > 0 ? (
         <div className="max-h-[390px] flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
-          {reminders.map(({ job, startDate, expiryDate }) => {
+          {reminders.map(
+            ({ job, startDate, expiryDate, timing, timingLabel }) => {
             return (
               <button
                 key={`${job.jobId}-${expiryDate.getTime()}`}
@@ -4700,13 +4806,20 @@ function MaintenanceExpiryCard({
                 </div>
 
                 <span
-                  className="inline-flex w-fit rounded-full bg-amber-100 px-3 py-1.5 text-xs font-extrabold text-amber-800"
+                  className={`inline-flex w-fit rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                    timing === "overdue"
+                      ? "bg-amber-100 text-amber-800"
+                      : timing === "today"
+                        ? "bg-orange-100 text-orange-800"
+                        : "bg-teal-100 text-teal-800"
+                  }`}
                 >
-                  Overdue
+                  {timingLabel}
                 </span>
               </button>
             );
-          })}
+            },
+          )}
         </div>
       ) : (
         <div className="flex flex-1 items-center px-5 py-5 text-center">
