@@ -688,9 +688,8 @@ type DashboardSettings = {
 const SETTINGS_ACCESS_ROLES = [
   "Owner",
   "Founder",
-  "Principal",
+  "Vision Nova Programmer",
   "General Manager",
-  "Vision Nova Programmer"
 ] as const;
 
 function canManageSettings(role: string) {
