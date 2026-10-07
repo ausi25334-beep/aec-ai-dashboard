@@ -267,6 +267,7 @@ type Job = {
 
   customerName: string;
   customerPhone: string;
+  customerAddress: string;
   customerCompanyName: string;
 
   assignedTechnician: string;
@@ -276,6 +277,7 @@ type Job = {
   status: JobStatus;
 
   jobStartDateTime: string;
+  appointmentDateTime: string;
 
   statusRemark: string;
   maintenanceDuration: string;
@@ -302,6 +304,7 @@ const JOB_COLUMN_KEYS = [
   "customerCompanyName",
   "customerName",
   "customerPhone",
+  "customerAddress",
   "description",
   "statusRemark",
   "maintenanceDuration",
@@ -312,6 +315,7 @@ const JOB_COLUMN_KEYS = [
   "jobCompleteDateTime",
   "invoiceNo",
   "jobStartDateTime",
+  "appointmentDateTime",
   "salesPerson",
   "salesPersonPhone",
 ] as const;
@@ -328,10 +332,12 @@ const DISPLAY_JOB_COLUMN_KEYS: JobColumnKey[] = [
   "jobId",
   "jobInDateTime",
   "jobStartDateTime",
+  "appointmentDateTime",
   "status",
   "customerCompanyName",
   "customerName",
   "customerPhone",
+  "customerAddress",
   "description",
   "statusRemark",
   "maintenanceDuration",
@@ -350,12 +356,14 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   salesPersonPhone: "Sales Person Phone",
   customerName: "Customer Name",
   customerPhone: "Customer Phone",
+  customerAddress: "Customer Address",
   customerCompanyName: "Customer Company Name",
   assignedTechnician: "Assigned Engineer",
   technicianPhone: "Technician Phone",
   description: "Description / Item",
   status: "Status",
   jobStartDateTime: "Job Start Date & Time",
+  appointmentDateTime: "Appointment",
   statusRemark: "Status Remark / Issue",
   maintenanceDuration: "Maintenance Duration",
   jobCompleteDateTime: "Job Complete Date & Time",
@@ -400,6 +408,25 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
       "maintenanceDuration",
     );
   }
+
+  const insertNewColumnAfter = (
+    newColumn: JobColumnKey,
+    existingColumn: JobColumnKey,
+  ) => {
+    if (uniqueSavedKeys.includes(newColumn)) return;
+
+    const currentIndex = normalized.indexOf(newColumn);
+    if (currentIndex !== -1) normalized.splice(currentIndex, 1);
+    const existingIndex = normalized.indexOf(existingColumn);
+    normalized.splice(
+      existingIndex === -1 ? normalized.length : existingIndex + 1,
+      0,
+      newColumn,
+    );
+  };
+
+  insertNewColumnAfter("appointmentDateTime", "jobStartDateTime");
+  insertNewColumnAfter("customerAddress", "customerPhone");
 
   return normalized;
 }
@@ -447,6 +474,11 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "customerPhone",
     "Customer Phone",
   ],
+  customerAddress: [
+    "customer_address",
+    "customerAddress",
+    "Customer Address",
+  ],
   customerCompanyName: [
     "customer_company_name",
     "customerCompanyName",
@@ -476,6 +508,12 @@ const JOB_FIELD_ALIASES: Record<JobColumnKey, string[]> = {
     "inProgressStartDateTime",
     "Job Start Date & Time",
     "In Progress Start Date & Time",
+  ],
+  appointmentDateTime: [
+    "appointment_datetime",
+    "appointmentDateTime",
+    "Appointment Date & Time",
+    "Appointment",
   ],
   statusRemark: [
     "status_remark_issue",
@@ -592,6 +630,11 @@ function mapJobRow(row: SupabaseRow): Job {
       "customerPhone",
       "Customer Phone",
     ]),
+    customerAddress: readText(row, [
+      "customer_address",
+      "customerAddress",
+      "Customer Address",
+    ]),
     customerCompanyName: readText(row, [
       "customer_company_name",
       "customerCompanyName",
@@ -628,6 +671,12 @@ function mapJobRow(row: SupabaseRow): Job {
         "In Progress Start Date & Time",
       ]),
     ),
+    appointmentDateTime: readText(row, [
+      "appointment_datetime",
+      "appointmentDateTime",
+      "Appointment Date & Time",
+      "Appointment",
+    ]),
     statusRemark: readText(row, [
       "status_remark_issue",
       "status_remark",
@@ -1362,7 +1411,7 @@ function JobDataTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[2800px] border-collapse text-left">
+        <table className="w-full min-w-[3160px] border-collapse text-left">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               {visibleColumns.map((column) => (
@@ -1508,15 +1557,22 @@ function JobTableCell({ job, column }: { job: Job; column: JobColumnKey }) {
     "jobCompleteDateTime",
     "collectionDateTime",
   ];
-  const value = dateTimeColumns.includes(column)
-    ? formatDisplayDateTime(job[column])
-    : job[column];
+  const value =
+    column === "appointmentDateTime"
+      ? formatAppointmentDateTimes(job.appointmentDateTime)
+      : dateTimeColumns.includes(column)
+        ? formatDisplayDateTime(job[column])
+        : job[column];
 
   return (
     <TableCell
       value={value}
       emphasized={false}
-      wide={column === "description" || column === "statusRemark"}
+      wide={
+        column === "description" ||
+        column === "statusRemark" ||
+        column === "customerAddress"
+      }
     />
   );
 }
@@ -2170,6 +2226,41 @@ function parseDateTime(value?: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+const APPOINTMENT_DATETIME_TOKEN_PATTERN =
+  /\d{4}-\d{1,2}-\d{1,2}(?:[T\s]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:AM|PM)?(?:Z|[+-]\d{2}:?\d{2})?)?|\d{1,2}[/-]\d{1,2}[/-]\d{4}(?:[,\s]+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?|\d{1,2}\s+[A-Za-z]+\s+\d{4}(?:[,\s]+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?/gi;
+
+function getAppointmentDateTimeTokens(value?: string) {
+  if (!value?.trim()) return [];
+
+  const tokens = value.match(APPOINTMENT_DATETIME_TOKEN_PATTERN) ?? [];
+  if (tokens.length > 0) return tokens.map((token) => token.trim());
+
+  return parseDateTimeParts(value) ? [value.trim()] : [];
+}
+
+function getAppointmentDateKeys(value?: string) {
+  return new Set(
+    getAppointmentDateTimeTokens(value)
+      .map((token) => parseDateTimeParts(token))
+      .filter((parts): parts is DateTimeParts => parts !== null)
+      .map(
+        (parts) =>
+          `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(
+            parts.day,
+          ).padStart(2, "0")}`,
+      ),
+  );
+}
+
+function formatAppointmentDateTimes(value?: string) {
+  if (!value?.trim()) return "-";
+
+  const tokens = getAppointmentDateTimeTokens(value);
+  return tokens.length > 0
+    ? tokens.map((token) => formatDisplayDateTime(token)).join("\n")
+    : value.trim();
+}
+
 type MaintenanceExpiryReminder = {
   job: Job;
   startDate: Date | null;
@@ -2336,6 +2427,7 @@ function compareJobsByNewest(a: Job, b: Job) {
 const JOB_DATE_COLUMNS = new Set<JobColumnKey>([
   "jobInDateTime",
   "jobStartDateTime",
+  "appointmentDateTime",
   "jobCompleteDateTime",
   "collectionDateTime",
 ]);
@@ -2375,8 +2467,16 @@ function compareJobsByColumn(
   if (!bValue) return -1;
 
   if (JOB_DATE_COLUMNS.has(column)) {
-    const aTime = parseDateTime(aValue)?.getTime();
-    const bTime = parseDateTime(bValue)?.getTime();
+    const aDateValue =
+      column === "appointmentDateTime"
+        ? getAppointmentDateTimeTokens(aValue)[0]
+        : aValue;
+    const bDateValue =
+      column === "appointmentDateTime"
+        ? getAppointmentDateTimeTokens(bValue)[0]
+        : bValue;
+    const aTime = parseDateTime(aDateValue)?.getTime();
+    const bTime = parseDateTime(bDateValue)?.getTime();
 
     if (aTime !== undefined && bTime !== undefined && aTime !== bTime) {
       return (aTime - bTime) * multiplier;
@@ -2507,9 +2607,10 @@ function getCalendarCompanyFontSize(companyName?: string) {
 
 function isJobScheduledOnDate(job: Job, dateKey: string) {
   /*
-    The Calendar is positioned by Job Start Date & Time.
+    The Calendar is positioned by every distinct date found in Appointment.
+    A job with more than one appointment date appears once on each date.
   */
-  return getJobDateKey(job.jobStartDateTime) === dateKey;
+  return getAppointmentDateKeys(job.appointmentDateTime).has(dateKey);
 }
 
 function formatDisplayDateTime(value?: string) {
@@ -4195,6 +4296,13 @@ export default function DashboardPage() {
                                 />
 
                                 <DateTimeDisplayRow
+                                  label="Appointment"
+                                  value={formatAppointmentDateTimes(
+                                    job.appointmentDateTime,
+                                  )}
+                                />
+
+                                <DateTimeDisplayRow
                                   label="Job Complete"
                                   value={formatDisplayDateTime(
                                     job.jobCompleteDateTime,
@@ -4317,6 +4425,7 @@ const JOB_INFORMATION_FIELDS: JobColumnKey[] = [
   "salesPerson",
   "customerName",
   "customerPhone",
+  "customerAddress",
   "customerCompanyName",
 ];
 
@@ -4325,6 +4434,7 @@ const JOB_PROGRESS_FIELDS: JobColumnKey[] = [
   "description",
   "status",
   "jobStartDateTime",
+  "appointmentDateTime",
   "statusRemark",
   "maintenanceDuration",
   "jobCompleteDateTime",
@@ -4363,6 +4473,8 @@ function ReadOnlyJobModal({
     const displayValue =
       key === "status"
         ? displayLabels[job.status]
+        : key === "appointmentDateTime"
+          ? formatAppointmentDateTimes(fieldValue)
         : DATE_TIME_FIELDS.has(key)
           ? formatDisplayDateTime(fieldValue)
           : fieldValue || "—";

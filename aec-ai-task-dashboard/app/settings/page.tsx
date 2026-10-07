@@ -12,10 +12,12 @@ const JOB_COLUMN_KEYS = [
   "jobId",
   "jobInDateTime",
   "jobStartDateTime",
+  "appointmentDateTime",
   "status",
   "customerCompanyName",
   "customerName",
   "customerPhone",
+  "customerAddress",
   "description",
   "statusRemark",
   "maintenanceDuration",
@@ -33,9 +35,11 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobId: "Job ID",
   jobInDateTime: "Job In Date & Time",
   jobStartDateTime: "Job Start Date & Time",
+  appointmentDateTime: "Appointment",
   salesPerson: "Sales Person",
   customerName: "Customer Name",
   customerPhone: "Customer Phone",
+  customerAddress: "Customer Address",
   customerCompanyName: "Customer Company Name",
   assignedTechnician: "Assigned Engineer",
   description: "Description / Item",
@@ -75,6 +79,25 @@ function normalizeColumnOrder(value: unknown): JobColumnKey[] {
       "maintenanceDuration",
     );
   }
+
+  const insertNewColumnAfter = (
+    newColumn: JobColumnKey,
+    existingColumn: JobColumnKey,
+  ) => {
+    if (uniqueSavedKeys.includes(newColumn)) return;
+
+    const currentIndex = normalized.indexOf(newColumn);
+    if (currentIndex !== -1) normalized.splice(currentIndex, 1);
+    const existingIndex = normalized.indexOf(existingColumn);
+    normalized.splice(
+      existingIndex === -1 ? normalized.length : existingIndex + 1,
+      0,
+      newColumn,
+    );
+  };
+
+  insertNewColumnAfter("appointmentDateTime", "jobStartDateTime");
+  insertNewColumnAfter("customerAddress", "customerPhone");
 
   return normalized;
 }
