@@ -2256,9 +2256,14 @@ function formatAppointmentDateTimes(value?: string) {
   if (!value?.trim()) return "-";
 
   const tokens = getAppointmentDateTimeTokens(value);
-  return tokens.length > 0
-    ? tokens.map((token) => formatDisplayDateTime(token)).join("\n")
-    : value.trim();
+  if (tokens.length === 0) return value.trim();
+
+  const formattedTokens = tokens.map((token) => formatDisplayDateTime(token));
+  return formattedTokens.length > 1
+    ? formattedTokens
+        .map((token, index) => `${index + 1}. ${token}`)
+        .join("\n")
+    : formattedTokens[0];
 }
 
 type MaintenanceExpiryReminder = {
@@ -2400,9 +2405,26 @@ function getLatestStatusRemarkTime(value?: string) {
   const parsedTimes = value
     .replace(/\\n/g, "\n")
     .split(/\r?\n/)
-    .map((line) =>
-      parseDateTime(line.trim().replace(/^\[/, ""))?.getTime(),
-    )
+    .map((line) => {
+      const timestampMatch = line.trim().match(
+        /^\[?((?:\d{1,2}\s+[A-Za-z]+\s+\d{4}|\d{1,2}[/-]\d{1,2}[/-]\d{4}),\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i,
+      );
+
+      if (!timestampMatch) return undefined;
+
+      const parts = parseDateTimeParts(timestampMatch[1]);
+      if (!parts || parts.hour === undefined || parts.minute === undefined) {
+        return undefined;
+      }
+
+      return new Date(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour,
+        parts.minute,
+      ).getTime();
+    })
     .filter((time): time is number => time !== undefined);
 
   return parsedTimes.length > 0 ? Math.max(...parsedTimes) : null;
