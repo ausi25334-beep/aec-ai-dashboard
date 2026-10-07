@@ -35,7 +35,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   jobId: "Job ID",
   jobInDateTime: "Job In Date & Time",
   jobStartDateTime: "Job Start Date & Time",
-  appointmentDateTime: "Appointment",
+  appointmentDateTime: "Appointment Date & Time",
   salesPerson: "Sales Person",
   customerName: "Customer Name",
   customerPhone: "Customer Phone",

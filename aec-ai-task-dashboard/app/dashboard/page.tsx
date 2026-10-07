@@ -363,7 +363,7 @@ const JOB_COLUMN_LABELS: Record<JobColumnKey, string> = {
   description: "Description / Item",
   status: "Status",
   jobStartDateTime: "Job Start Date & Time",
-  appointmentDateTime: "Appointment",
+  appointmentDateTime: "Appointment Date & Time",
   statusRemark: "Status Remark / Issue",
   maintenanceDuration: "Maintenance Duration",
   jobCompleteDateTime: "Job Complete Date & Time",
@@ -1592,8 +1592,44 @@ function TableCell({
         wide ? "min-w-[240px]" : ""
       } ${emphasized ? "font-semibold text-slate-900" : "text-slate-600"}`}
     >
-      {value?.trim() || "-"}
+      <LinkifiedText value={value?.trim() || "-"} />
     </td>
+  );
+}
+
+const LINK_TOKEN_PATTERN = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+
+function LinkifiedText({ value }: { value: string }) {
+  return (
+    <>
+      {value.split(LINK_TOKEN_PATTERN).map((part, index) => {
+        if (!/^(?:https?:\/\/|www\.)/i.test(part)) {
+          return <span key={`${index}-text`}>{part}</span>;
+        }
+
+        const trailingPunctuation = part.match(/[),.;!?]+$/)?.[0] ?? "";
+        const linkText = trailingPunctuation
+          ? part.slice(0, -trailingPunctuation.length)
+          : part;
+        const href = /^www\./i.test(linkText)
+          ? `https://${linkText}`
+          : linkText;
+
+        return (
+          <span key={`${index}-link`}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 transition hover:text-blue-800 hover:decoration-blue-600"
+            >
+              {linkText}
+            </a>
+            {trailingPunctuation}
+          </span>
+        );
+      })}
+    </>
   );
 }
 
@@ -4318,7 +4354,7 @@ export default function DashboardPage() {
                                 />
 
                                 <DateTimeDisplayRow
-                                  label="Appointment"
+                                  label="Appointment Date & Time"
                                   value={formatAppointmentDateTimes(
                                     job.appointmentDateTime,
                                   )}
@@ -4505,7 +4541,7 @@ function ReadOnlyJobModal({
       <div
         className="mt-1.5 min-h-11 w-full whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm leading-6 text-slate-900"
       >
-        {displayValue}
+        <LinkifiedText value={displayValue} />
       </div>
     );
   }
